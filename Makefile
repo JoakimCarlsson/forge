@@ -1,4 +1,4 @@
-EXAMPLE ?= clear
+EXAMPLE ?= ui
 
 .PHONY: run debug build fmt lint test clean
 

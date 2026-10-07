@@ -12,6 +12,7 @@ use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::window::{WindowAttributes, WindowId};
 
+use crate::input::{ButtonState, Key, KeyEvent, Modifiers, PointerButton, ScrollDelta};
 use crate::{WindowConfig, WindowHandler};
 
 /// A failure to create the event loop, the window, or to run the loop.
@@ -58,6 +59,12 @@ impl Window {
         (size.width, size.height)
     }
 
+    /// The physical pixels per logical pixel.
+    #[must_use]
+    pub fn scale_factor(&self) -> f64 {
+        self.inner.scale_factor()
+    }
+
     /// Asks for the window to be redrawn.
     pub fn request_redraw(&self) {
         self.inner.request_redraw();
@@ -88,6 +95,10 @@ struct Host<H> {
     window: Option<Window>,
     /// The first failure, reported when the loop ends.
     error: Option<WindowError>,
+    /// The modifier keys currently held.
+    modifiers: Modifiers,
+    /// The physical pixels per logical pixel, which pointer positions are divided by.
+    scale_factor: f64,
 }
 
 impl<H: WindowHandler> ApplicationHandler for Host<H> {
@@ -104,6 +115,7 @@ impl<H: WindowHandler> ApplicationHandler for Host<H> {
                 let window = Window {
                     inner: Arc::new(inner),
                 };
+                self.scale_factor = window.scale_factor();
                 self.handler.created(&window);
                 window.request_redraw();
                 self.window = Some(window);
@@ -129,7 +141,47 @@ impl<H: WindowHandler> ApplicationHandler for Host<H> {
                     window.request_redraw();
                 }
             }
+            WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
+                self.scale_factor = scale_factor;
+                self.handler.scale_factor_changed(scale_factor);
+            }
+            WindowEvent::CursorMoved { position, .. } => {
+                let logical = position.to_logical::<f32>(self.scale_factor);
+                self.handler.pointer_moved(logical.x, logical.y);
+            }
+            WindowEvent::CursorLeft { .. } => self.handler.pointer_left(),
+            WindowEvent::MouseInput { state, button, .. } => self.handler.pointer_button(
+                PointerButton::from_winit(button),
+                ButtonState::from_winit(state),
+            ),
+            WindowEvent::MouseWheel { delta, .. } => self
+                .handler
+                .scrolled(ScrollDelta::from_winit(delta, self.scale_factor)),
+            WindowEvent::ModifiersChanged(modifiers) => {
+                self.modifiers = Modifiers::from_winit(modifiers.state());
+            }
+            WindowEvent::KeyboardInput { event, .. } => self.forward_key(&event),
             _ => {}
+        }
+    }
+}
+
+impl<H: WindowHandler> Host<H> {
+    /// Hands a keyboard event to the handler, followed by the text it produced.
+    fn forward_key(&mut self, event: &winit::event::KeyEvent) {
+        let state = ButtonState::from_winit(event.state);
+        self.handler.key(&KeyEvent {
+            key: Key::from_winit(&event.logical_key),
+            state,
+            repeat: event.repeat,
+            modifiers: self.modifiers,
+        });
+        if state == ButtonState::Pressed
+            && !self.modifiers.control
+            && !self.modifiers.logo
+            && let Some(text) = &event.text
+        {
+            self.handler.text_input(text);
         }
     }
 }
@@ -146,6 +198,8 @@ pub fn run<H: WindowHandler>(config: WindowConfig, handler: H) -> Result<(), Win
         handler,
         window: None,
         error: None,
+        modifiers: Modifiers::default(),
+        scale_factor: 1.0,
     };
     event_loop
         .run_app(&mut host)

@@ -1,5 +1,7 @@
 //! The game-facing trait and frame description.
 
+use fr_ui::{Div, Rgba, Theme, div};
+
 /// What a game sees of the frame being run.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Frame {
@@ -14,12 +16,27 @@ pub struct Frame {
 }
 
 /// A game: the state and rules the engine drives each frame.
+///
+/// The engine asks for a UI tree every frame with [`App::view`] and hands back
+/// the messages that tree's controls send with [`App::message`]. The tree
+/// never mutates the game; only [`App::message`] and [`App::update`] do.
 pub trait App {
+    /// What the controls in the UI tree send when the user activates them.
+    type Message: Clone + 'static;
+
     /// Advances the game by one frame.
     fn update(&mut self, frame: &Frame);
 
-    /// The colour the window is cleared to, as linear red, green, blue and alpha.
-    fn clear_color(&self) -> [f64; 4] {
-        [0.05, 0.05, 0.08, 1.0]
+    /// Applies one message sent by a control in the tree last built.
+    fn message(&mut self, _message: Self::Message) {}
+
+    /// Builds this frame's UI tree from the game's state, in `theme`.
+    fn view(&self, _theme: &Theme) -> Div<Self::Message> {
+        div()
+    }
+
+    /// The colour the window is cleared to before the UI is drawn.
+    fn clear_color(&self, theme: &Theme) -> Rgba {
+        theme.colors.background
     }
 }

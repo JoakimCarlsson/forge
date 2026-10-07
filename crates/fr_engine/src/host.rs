@@ -3,8 +3,12 @@
 use std::fmt;
 
 use fr_core::FrameClock;
-use fr_render::{RenderError, Renderer};
-use fr_window::{Window, WindowConfig, WindowError, WindowHandler};
+use fr_render::{DrawList, Point, RenderError, Renderer, Size};
+use fr_ui::{Theme, Ui};
+use fr_window::{
+    ButtonState, Key, KeyEvent, PointerButton, ScrollDelta, Window, WindowConfig, WindowError,
+    WindowHandler,
+};
 
 use crate::{App, Frame};
 
@@ -37,25 +41,53 @@ impl std::error::Error for EngineError {
     }
 }
 
-/// Connects an [`App`] to the window, the clock and the renderer.
-struct Host<A> {
+/// Connects an [`App`] to the window, the clock, the renderer and the UI.
+struct Host<A: App> {
     /// The game being driven.
     app: A,
     /// The renderer, once the window exists.
     renderer: Option<Renderer>,
+    /// The UI state that outlives each frame's tree.
+    ui: Ui<A::Message>,
+    /// The primitives of the frame being built, reused from frame to frame.
+    list: DrawList,
     /// Times each frame.
     clock: FrameClock,
     /// The current drawable size in physical pixels.
     size: (u32, u32),
+    /// The physical pixels per logical pixel.
+    scale_factor: f64,
     /// The first failure, reported when the loop ends.
     error: Option<RenderError>,
+}
+
+impl<A: App> Host<A> {
+    /// Passes the renderer the latest size and scale factor.
+    fn resize_renderer(&mut self) {
+        if let Some(renderer) = &mut self.renderer {
+            renderer.resize(self.size.0, self.size.1, self.scale_factor as f32);
+        }
+    }
+
+    /// Applies the message a control sent, if it sent one.
+    fn deliver(&mut self, message: Option<A::Message>) {
+        if let Some(message) = message {
+            self.app.message(message);
+        }
+    }
 }
 
 impl<A: App> WindowHandler for Host<A> {
     /// Creates the renderer for the new window.
     fn created(&mut self, window: &Window) {
         self.size = window.size();
-        match Renderer::new(window.clone(), self.size.0, self.size.1) {
+        self.scale_factor = window.scale_factor();
+        match Renderer::new(
+            window.clone(),
+            self.size.0,
+            self.size.1,
+            self.scale_factor as f32,
+        ) {
             Ok(renderer) => self.renderer = Some(renderer),
             Err(error) => self.error = Some(error),
         }
@@ -64,12 +96,16 @@ impl<A: App> WindowHandler for Host<A> {
     /// Resizes the swapchain.
     fn resized(&mut self, width: u32, height: u32) {
         self.size = (width, height);
-        if let Some(renderer) = &mut self.renderer {
-            renderer.resize(width, height);
-        }
+        self.resize_renderer();
     }
 
-    /// Updates the game, then draws the frame.
+    /// Rescales the swapchain's logical size.
+    fn scale_factor_changed(&mut self, scale_factor: f64) {
+        self.scale_factor = scale_factor;
+        self.resize_renderer();
+    }
+
+    /// Updates the game, builds its tree, then draws the frame.
     fn redraw(&mut self) {
         let Some(renderer) = &mut self.renderer else {
             return;
@@ -81,8 +117,67 @@ impl<A: App> WindowHandler for Host<A> {
             width: self.size.0,
             height: self.size.1,
         });
-        renderer.clear(self.app.clear_color());
+
+        let theme = *self.ui.theme();
+        let viewport = renderer.size();
+        self.list.reset(viewport);
+        let view = self.app.view(&theme);
+        self.ui.draw(
+            renderer.text(),
+            &mut self.list,
+            viewport,
+            Point::default(),
+            view,
+        );
+        renderer.render(&self.list, self.app.clear_color(&theme));
     }
+
+    /// Moves the pointer in the UI.
+    fn pointer_moved(&mut self, x: f32, y: f32) {
+        self.ui.pointer_moved(Point::new(x, y));
+    }
+
+    /// Takes the pointer out of the UI.
+    fn pointer_left(&mut self) {
+        self.ui.pointer_left();
+    }
+
+    /// Presses or releases the primary button in the UI.
+    fn pointer_button(&mut self, button: PointerButton, state: ButtonState) {
+        if button != PointerButton::Primary {
+            return;
+        }
+        match state {
+            ButtonState::Pressed => self.ui.pointer_pressed(),
+            ButtonState::Released => {
+                let message = self.ui.pointer_released();
+                self.deliver(message);
+            }
+        }
+    }
+
+    /// Ignores scrolling, which no UI element answers to yet.
+    fn scrolled(&mut self, _delta: ScrollDelta) {}
+
+    /// Moves focus on tab, activates it on enter or space, drops it on escape.
+    fn key(&mut self, event: &KeyEvent) {
+        if event.state != ButtonState::Pressed {
+            return;
+        }
+        match event.key {
+            Key::Tab if event.modifiers.shift => self.ui.focus_previous(),
+            Key::Tab => self.ui.focus_next(),
+            Key::Escape => self.ui.clear_focus(),
+            Key::Enter | Key::Space if !event.repeat => {
+                let message = self.ui.activate_focused();
+                self.deliver(message);
+            }
+            _ => {}
+        }
+    }
+
+    /// Ignores text, which no UI element takes yet.
+    fn text_input(&mut self, _text: &str) {}
 }
 
 /// Opens a window titled `title` and runs `app` until the window is closed.
@@ -91,38 +186,22 @@ impl<A: App> WindowHandler for Host<A> {
 ///
 /// Returns [`EngineError`] when the window or the graphics device cannot be set up.
 pub fn run<A: App>(title: &str, app: A) -> Result<(), EngineError> {
+    let ui = Ui::new(Theme::default());
     let mut host = Host {
         app,
         renderer: None,
+        ui,
+        list: DrawList::new(Size::zero()),
         clock: FrameClock::new(),
         size: (0, 0),
+        scale_factor: 1.0,
         error: None,
     };
     let config = WindowConfig {
         title: title.to_owned(),
         ..WindowConfig::default()
     };
-    fr_window::run(config, HostRef(&mut host)).map_err(EngineError::Window)?;
+    fr_window::run(config, &mut host).map_err(EngineError::Window)?;
     host.error
         .map_or(Ok(()), |error| Err(EngineError::Render(error)))
-}
-
-/// Lends a [`Host`] to the window loop so its error can be read afterwards.
-struct HostRef<'a, A>(&'a mut Host<A>);
-
-impl<A: App> WindowHandler for HostRef<'_, A> {
-    /// Forwards to the host.
-    fn created(&mut self, window: &Window) {
-        self.0.created(window);
-    }
-
-    /// Forwards to the host.
-    fn resized(&mut self, width: u32, height: u32) {
-        self.0.resized(width, height);
-    }
-
-    /// Forwards to the host.
-    fn redraw(&mut self) {
-        self.0.redraw();
-    }
 }
