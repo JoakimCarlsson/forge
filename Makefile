@@ -1,12 +1,13 @@
-EXAMPLE ?= ui
+EXAMPLE ?= model
+ARGS ?=
 
 .PHONY: run debug build fmt lint test clean
 
 run:
-	cargo run --release -p fr_engine --example $(EXAMPLE)
+	cargo run --release -p fr_engine --example $(EXAMPLE) -- $(ARGS)
 
 debug:
-	cargo run -p fr_engine --example $(EXAMPLE)
+	cargo run -p fr_engine --example $(EXAMPLE) -- $(ARGS)
 
 build:
 	cargo build --workspace --all-targets

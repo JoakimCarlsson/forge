@@ -3,14 +3,14 @@
 use std::fmt;
 
 use fr_core::FrameClock;
-use fr_render::{DrawList, Point, RenderError, Renderer, Size};
+use fr_render::{DrawList, Point, RenderError, Renderer, Scene, Size};
 use fr_ui::{Theme, Ui};
 use fr_window::{
     ButtonState, Key, KeyEvent, PointerButton, ScrollDelta, Window, WindowConfig, WindowError,
     WindowHandler,
 };
 
-use crate::{App, Frame};
+use crate::{App, Assets, Frame, Input};
 
 /// A failure to start or run the engine.
 #[derive(Debug)]
@@ -51,6 +51,8 @@ struct Host<A: App> {
     ui: Ui<A::Message>,
     /// The primitives of the frame being built, reused from frame to frame.
     list: DrawList,
+    /// The 3D scene the app describes each frame, reused from frame to frame.
+    scene: Scene,
     /// Times each frame.
     clock: FrameClock,
     /// The current drawable size in physical pixels.
@@ -88,7 +90,10 @@ impl<A: App> WindowHandler for Host<A> {
             self.size.1,
             self.scale_factor as f32,
         ) {
-            Ok(renderer) => self.renderer = Some(renderer),
+            Ok(mut renderer) => {
+                self.app.init(&mut Assets::new(&mut renderer));
+                self.renderer = Some(renderer);
+            }
             Err(error) => self.error = Some(error),
         }
     }
@@ -118,6 +123,9 @@ impl<A: App> WindowHandler for Host<A> {
             height: self.size.1,
         });
 
+        self.scene.clear();
+        self.app.scene(&mut self.scene);
+
         let theme = *self.ui.theme();
         let viewport = renderer.size();
         self.list.reset(viewport);
@@ -129,38 +137,52 @@ impl<A: App> WindowHandler for Host<A> {
             Point::default(),
             view,
         );
-        renderer.render(&self.list, self.app.clear_color(&theme));
+        let vsync = self.app.vsync();
+        if renderer.vsync() != vsync {
+            renderer.set_vsync(vsync);
+        }
+        renderer.render(&self.list, Some(&self.scene), self.app.clear_color(&theme));
     }
 
     /// Moves the pointer in the UI.
     fn pointer_moved(&mut self, x: f32, y: f32) {
         self.ui.pointer_moved(Point::new(x, y));
+        self.app.input(&Input::PointerMoved { x, y });
     }
 
     /// Takes the pointer out of the UI.
     fn pointer_left(&mut self) {
         self.ui.pointer_left();
+        self.app.input(&Input::PointerLeft);
     }
 
-    /// Presses or releases the primary button in the UI.
+    /// Presses or releases a button in the UI, and tells the app what the UI did not take.
     fn pointer_button(&mut self, button: PointerButton, state: ButtonState) {
-        if button != PointerButton::Primary {
-            return;
-        }
-        match state {
-            ButtonState::Pressed => self.ui.pointer_pressed(),
-            ButtonState::Released => {
-                let message = self.ui.pointer_released();
-                self.deliver(message);
+        let over_ui = self.ui.pointer_over_region();
+        if button == PointerButton::Primary {
+            match state {
+                ButtonState::Pressed => self.ui.pointer_pressed(),
+                ButtonState::Released => {
+                    let message = self.ui.pointer_released();
+                    self.deliver(message);
+                }
             }
         }
+        if state == ButtonState::Released || !over_ui {
+            self.app.input(&Input::PointerButton { button, state });
+        }
     }
 
-    /// Ignores scrolling, which no UI element answers to yet.
-    fn scrolled(&mut self, _delta: ScrollDelta) {}
+    /// Tells the app about scrolling that is not over the UI.
+    fn scrolled(&mut self, delta: ScrollDelta) {
+        if !self.ui.pointer_over_region() {
+            self.app.input(&Input::Scrolled(delta));
+        }
+    }
 
     /// Moves focus on tab, activates it on enter or space, drops it on escape.
     fn key(&mut self, event: &KeyEvent) {
+        self.app.input(&Input::Key(event.clone()));
         if event.state != ButtonState::Pressed {
             return;
         }
@@ -192,6 +214,7 @@ pub fn run<A: App>(title: &str, app: A) -> Result<(), EngineError> {
         renderer: None,
         ui,
         list: DrawList::new(Size::zero()),
+        scene: Scene::default(),
         clock: FrameClock::new(),
         size: (0, 0),
         scale_factor: 1.0,

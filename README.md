@@ -5,3 +5,5 @@ A general-purpose Rust game engine built on winit and wgpu. See [AGENTS.md](AGEN
 ```sh
 make run
 ```
+
+A 3D viewer with lights, shadows and optional glTF: `make run EXAMPLE=model ARGS=path/to/model.glb`.

@@ -6,7 +6,7 @@ engine code never contains game-specific rules, content or scenes.
 ## Commands
 
 ```sh
-make run   # Run the example (EXAMPLE=ui by default; EXAMPLE=clear also exists) in release
+make run   # Run the example (EXAMPLE=model by default; clear and ui also exist) in release; ARGS passes arguments, e.g. make run EXAMPLE=model ARGS=path/to/model.glb
 make debug # Run the example in debug
 make build # cargo build --workspace --all-targets
 make fmt   # cargo fmt --all
@@ -21,20 +21,28 @@ Cargo.toml   Workspace root: members are crates/*; rustfmt.toml and clippy.toml 
 crates/      The workspace members, all prefixed fr_
 ```
 
-- `fr_core`: frame timing and shared value types; no window or graphics dependency.
+- `fr_core`: frame timing and shared value types; no window or graphics dependency. Owns the one set of math types (glam's `Vec3`, `Quat`, `Mat4`, plus `Transform`, `look_at`, `perspective`, `orthographic`), the light types (`DirectionalLight`, `PointLight`, `SpotLight`, `Light`) and the `MeshId`/`MaterialId`/`TextureId` handles.
+- `fr_assets`: CPU-side asset data (`MeshData`, `MaterialData`, `ImageData`, `ModelData`), the built-in `cube`/`sphere`/`plane` and the glTF/GLB importer (`load_gltf`, including `KHR_lights_punctual`). Depends on `fr_core` only; never touches a device.
 - `fr_window`: the winit window and event loop; forwards pointer, scroll, key, text and scale-factor events as crate-owned types.
-- `fr_render`: the wgpu device, swapchain, glyph atlas, text shaping (`TextSystem`), the quad and glyph pipelines, and the draw list (`DrawList`, `Quad`, `Rgba`, `Rect`) a frame is submitted as.
+- `fr_render`: the wgpu device, swapchain, glyph atlas, text shaping (`TextSystem`), the quad and glyph pipelines, and the draw list (`DrawList`, `Quad`, `Rgba`, `Rect`) a frame is submitted as. Also the forward 3D pass drawn under the UI in the same submission: uploads of assets to handles, a `Scene` (camera, lights, mesh instances), metallic-roughness PBR, point/spot/directional lights, cascaded sun shadows and spot/point shadow maps. Present mode defaults to uncapped (`Renderer::set_vsync`).
 - `fr_ui`: the element tree, layout pass, hit testing, focus and input routing over `fr_render`'s draw list; style, the one fixed `Theme` (tokens only, no switching), SVG icons (`IconName`, `icon`, `icon_button`; artwork in `assets/icons` with its `LICENSES`), `Div`, `Text` and the widgets.
-- `fr_engine`: the crate a game depends on (`App`, `run`); re-exports `fr_ui` as `ui`. Examples live in `crates/fr_engine/examples` (`clear`, `ui`).
+- `fr_engine`: the crate a game depends on (`App`, `run`, `Assets` with `load_gltf`); `App::scene` describes the 3D frame, `App::vsync` chooses vsync; re-exports `fr_ui` as `ui` and `fr_assets` as `assets`. Examples live in `crates/fr_engine/examples` (`clear`, `ui`, `model`).
 
 ## Rules
 
-- Dependencies point downwards only: `fr_engine -> fr_ui, fr_render, fr_window, fr_core`, and `fr_ui -> fr_render`. `fr_ui` never knows winit. A lower crate never knows a higher one.
+- Dependencies point downwards only: `fr_engine -> fr_ui, fr_render, fr_assets, fr_window, fr_core`, `fr_ui -> fr_render`, `fr_render -> fr_assets, fr_core`, and `fr_assets -> fr_core`. `fr_ui` never knows winit. A lower crate never knows a higher one.
 - winit and wgpu types never appear in the public API of `fr_engine`, `fr_ui`, or the input types of `fr_window`. wgpu stays inside `fr_render`.
 - `fr_core` stays usable without a window or graphics device, which keeps its tests headless.
 - Initialization failures return an error and the binary exits nonzero.
 - Every module file starts with a `//!` doc.
 - Do not add speculative subsystems before their contracts are defined. Keep changes scoped.
+
+## Rendering principles
+
+- Shaders are `.wgsl` parts in `fr_render/src/shaders`, joined with `concat!` per pipeline (common, output, pbr, shadows, lights, mesh; shadow_depth for shadow maps). One pipeline per blend/culling variant, never per object; object transforms live in one storage buffer indexed by instance.
+- Colour is linear until the output: textures marked sRGB are decoded by the GPU, data textures are not, and the mesh shader tonemaps (ACES) and encodes the swapchain format itself.
+- Avoid local `var`s of struct or array type in WGSL (use constructors and arithmetic): the Vulkan validation layer rejects them under `WGPU_VALIDATION=1`, which `Renderer::new` honours.
+- Light units: directional intensity is illuminance on a facing surface; point and spot intensity is illuminance at one unit, with inverse-square falloff and a smooth range window.
 
 ## UI principles
 

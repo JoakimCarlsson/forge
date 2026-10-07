@@ -11,3 +11,4 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+glam = { version = "0.34.1", features = ["bytemuck"] }

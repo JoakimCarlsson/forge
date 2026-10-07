@@ -13,6 +13,9 @@ pub struct Div<M> {
     children: Vec<Box<dyn Element<M>>>,
     /// What a click on this container sends, when it answers to one at all.
     on_click: Option<M>,
+    /// Whether the pointer is over this container for the app's purposes even
+    /// when it has no click message, as a panel over a scene is.
+    blocks_pointer: bool,
     /// What the last measurement found, for painting to reuse.
     measured: Option<Measurement>,
 }
@@ -63,6 +66,7 @@ pub fn div<M>() -> Div<M> {
         style: Style::default(),
         children: Vec::new(),
         on_click: None,
+        blocks_pointer: false,
         measured: None,
     }
 }
@@ -98,6 +102,13 @@ impl<M> Div<M> {
     /// Makes this container answer to a click by sending `message`.
     pub fn on_click(mut self, message: M) -> Self {
         self.on_click = Some(message);
+        self
+    }
+
+    /// Makes this container a region the pointer cannot reach past, without
+    /// answering to a click, so input over it never goes to what is behind it.
+    pub fn blocks_pointer(mut self) -> Self {
+        self.blocks_pointer = true;
         self
     }
 
@@ -312,6 +323,7 @@ impl<M: Clone> Element<M> for Div<M> {
     fn paint(&mut self, bounds: Rect, cx: &mut PaintContext<'_, '_, M>) {
         let interaction = match self.on_click.clone() {
             Some(message) => cx.interactive(bounds, message),
+            None if self.blocks_pointer => cx.clickable(bounds, None),
             None => Interaction::default(),
         };
 

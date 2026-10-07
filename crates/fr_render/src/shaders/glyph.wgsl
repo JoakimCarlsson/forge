@@ -28,15 +28,9 @@ struct Fragment {
 }
 
 fn unit_corner(index: u32) -> vec2<f32> {
-    var corners = array<vec2<f32>, 6>(
-        vec2<f32>(0.0, 0.0),
-        vec2<f32>(1.0, 0.0),
-        vec2<f32>(0.0, 1.0),
-        vec2<f32>(0.0, 1.0),
-        vec2<f32>(1.0, 0.0),
-        vec2<f32>(1.0, 1.0),
-    );
-    return corners[index];
+    let x = index == 1u || index == 4u || index == 5u;
+    let y = index == 2u || index == 3u || index == 5u;
+    return vec2<f32>(select(0.0, 1.0, x), select(0.0, 1.0, y));
 }
 
 @vertex
@@ -51,17 +45,17 @@ fn vertex(@builtin(vertex_index) index: u32, instance: Instance) -> Fragment {
     );
     let point = instance.origin + instance.size * 0.5 + rotated;
 
-    var out: Fragment;
-    out.position = vec4<f32>(
-        point.x / viewport.size.x * 2.0 - 1.0,
-        1.0 - point.y / viewport.size.y * 2.0,
-        0.0,
-        1.0,
+    return Fragment(
+        vec4<f32>(
+            point.x / viewport.size.x * 2.0 - 1.0,
+            1.0 - point.y / viewport.size.y * 2.0,
+            0.0,
+            1.0,
+        ),
+        instance.uv_origin + corner * instance.uv_size,
+        instance.color,
+        instance.clip,
     );
-    out.uv = instance.uv_origin + corner * instance.uv_size;
-    out.color = instance.color;
-    out.clip = instance.clip;
-    return out;
 }
 
 @fragment

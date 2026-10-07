@@ -2,19 +2,30 @@
 //!
 //! [`Renderer`] is the only thing in the workspace that holds a wgpu device.
 //! Callers hand it a [`DrawList`] in logical pixels; scaling to physical
-//! pixels, rasterizing glyphs and submitting the pass happen in here.
+//! pixels, rasterizing glyphs and submitting the passes happen in here. A 3D
+//! [`Scene`] drawn first and the UI drawn over it share the one frame.
 
 use std::sync::Arc;
 
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 
+use fr_assets::{MaterialData, MeshData, ModelData, SamplerData, TextureSlot};
+use fr_core::{MaterialId, MeshId, TextureId};
+use hashbrown::HashMap;
+
 use crate::RenderError;
 use crate::atlas::GlyphAtlas;
 use crate::color::Rgba;
 use crate::draw::DrawList;
+use crate::forward::ForwardPass;
 use crate::geometry::{Rect, Size};
 use crate::pipeline::{GlyphInstance, InstanceBuffer, QuadInstance, Viewport, build_pipeline};
+use crate::resources::Resources;
+use crate::scene::{MeshInstance, Model, Scene};
 use crate::text::TextSystem;
+
+/// The multisample count the 3D pass uses where the surface supports it.
+const SAMPLES: u32 = 4;
 
 /// Owns the GPU device, queue and swapchain surface backing one window.
 pub struct Renderer {
@@ -24,6 +35,8 @@ pub struct Renderer {
     device: wgpu::Device,
     /// The queue work is submitted to.
     queue: wgpu::Queue,
+    /// The present modes the surface supports.
+    present_modes: Vec<wgpu::PresentMode>,
     /// The swapchain configuration most recently requested.
     config: wgpu::SurfaceConfiguration,
     /// The physical size the swapchain was last configured to present.
@@ -50,6 +63,12 @@ pub struct Renderer {
     quads: Vec<QuadInstance>,
     /// Glyph instances gathered for a frame, reused from frame to frame.
     glyphs: Vec<GlyphInstance>,
+    /// The meshes, materials and textures the 3D pass draws from.
+    resources: Resources,
+    /// The 3D pass.
+    forward: ForwardPass,
+    /// The material of anything drawn without one of its own.
+    default_material: MaterialId,
 }
 
 impl Renderer {
@@ -64,7 +83,8 @@ impl Renderer {
     where
         W: HasWindowHandle + HasDisplayHandle + Send + Sync + 'static,
     {
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+        let instance =
+            wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle().with_env());
         let surface = instance
             .create_surface(Arc::new(window))
             .map_err(RenderError::Surface)?;
@@ -97,13 +117,32 @@ impl Renderer {
             format,
             width: width.max(1),
             height: height.max(1),
-            present_mode: wgpu::PresentMode::AutoVsync,
+            present_mode: pick_present_mode(&capabilities.present_modes, false),
             alpha_mode,
             color_space: wgpu::SurfaceColorSpace::Srgb,
             view_formats: vec![],
             desired_maximum_frame_latency: 2,
         };
         surface.configure(&device, &config);
+
+        let samples = if adapter
+            .get_texture_format_features(format)
+            .flags
+            .sample_count_supported(SAMPLES)
+        {
+            SAMPLES
+        } else {
+            1
+        };
+        let mut resources = Resources::new(&device, &queue);
+        let default_material = resources.create_material(&device, &MaterialData::default())?;
+        let forward = ForwardPass::new(
+            &device,
+            &resources,
+            format,
+            (config.width, config.height),
+            samples,
+        );
 
         let viewport_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("viewport"),
@@ -154,6 +193,7 @@ impl Renderer {
         );
 
         Ok(Self {
+            present_modes: capabilities.present_modes,
             surface,
             device,
             queue,
@@ -170,7 +210,118 @@ impl Renderer {
             glyph_instances: InstanceBuffer::new("glyph instances"),
             quads: Vec::new(),
             glyphs: Vec::new(),
+            resources,
+            forward,
+            default_material,
         })
+    }
+
+    /// The material meshes get when they are drawn without one of their own:
+    /// white, non-metallic and half rough.
+    pub fn default_material(&self) -> MaterialId {
+        self.default_material
+    }
+
+    /// Uploads `image` as a texture read with `sampler`.
+    ///
+    /// Set `srgb` for colour images and clear it for data such as normals and
+    /// roughness, so sampling returns linear values either way.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RenderError::InvalidAsset`] when the pixels do not match the
+    /// size or the size exceeds the device's limit.
+    pub fn create_texture(
+        &mut self,
+        image: &fr_assets::ImageData,
+        sampler: SamplerData,
+        srgb: bool,
+    ) -> Result<TextureId, RenderError> {
+        self.resources
+            .create_texture(&self.device, &self.queue, image, sampler, srgb)
+    }
+
+    /// Uploads `mesh` and returns the handle to draw it with.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RenderError::InvalidAsset`] when the mesh is empty or its
+    /// attributes and indices disagree.
+    pub fn create_mesh(&mut self, mesh: &MeshData) -> Result<MeshId, RenderError> {
+        self.resources.create_mesh(&self.device, mesh)
+    }
+
+    /// Creates a material from factors and uploaded textures.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RenderError::InvalidAsset`] when a texture handle is unknown.
+    pub fn create_material(
+        &mut self,
+        material: &MaterialData<TextureId>,
+    ) -> Result<MaterialId, RenderError> {
+        self.resources.create_material(&self.device, material)
+    }
+
+    /// Uploads every texture, material and mesh of `model` and returns the
+    /// placed meshes as a [`Model`].
+    ///
+    /// A texture used both as colour and as data is uploaded once for each.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RenderError::InvalidAsset`] when the model refers to an image,
+    /// texture, material or mesh it does not contain, or when one of them is invalid.
+    pub fn upload_model(&mut self, model: &ModelData) -> Result<Model, RenderError> {
+        let mut uploaded: HashMap<(usize, bool), TextureId> = HashMap::new();
+        let mut materials = Vec::with_capacity(model.materials.len());
+        for material in &model.materials {
+            let resolved = material.try_map_textures(|&texture, slot| {
+                self.upload_model_texture(model, texture, slot, &mut uploaded)
+            })?;
+            materials.push(self.create_material(&resolved)?);
+        }
+        let meshes = model
+            .meshes
+            .iter()
+            .map(|mesh| self.create_mesh(mesh))
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut instances = Vec::with_capacity(model.parts.len());
+        for part in &model.parts {
+            instances.push(MeshInstance {
+                mesh: pick_item(&meshes, part.mesh)?,
+                material: match part.material {
+                    Some(index) => pick_item(&materials, index)?,
+                    None => self.default_material,
+                },
+                transform: part.transform,
+            });
+        }
+        Ok(Model {
+            instances,
+            lights: model.lights.clone(),
+        })
+    }
+
+    /// The texture `index` of `model` uploaded for `slot`, reusing an earlier upload.
+    fn upload_model_texture(
+        &mut self,
+        model: &ModelData,
+        index: usize,
+        slot: TextureSlot,
+        uploaded: &mut HashMap<(usize, bool), TextureId>,
+    ) -> Result<TextureId, RenderError> {
+        let key = (index, slot.is_srgb());
+        if let Some(&id) = uploaded.get(&key) {
+            return Ok(id);
+        }
+        let missing =
+            || RenderError::InvalidAsset(String::from("a material uses a missing texture"));
+        let texture = model.textures.get(index).ok_or_else(missing)?;
+        let image = model.images.get(texture.image).ok_or_else(missing)?;
+        let id = self.create_texture(image, texture.sampler, slot.is_srgb())?;
+        uploaded.insert(key, id);
+        Ok(id)
     }
 
     /// The text system layout measures with and draw lists shape through.
@@ -200,17 +351,38 @@ impl Renderer {
         self.config.height = height;
     }
 
+    /// Chooses whether presenting waits for the display's refresh.
+    ///
+    /// Off, the default, presents as fast as frames finish: immediate where the
+    /// surface offers it, else mailbox, else the vsynced queue every surface has.
+    pub fn set_vsync(&mut self, enabled: bool) {
+        let mode = pick_present_mode(&self.present_modes, enabled);
+        if mode != self.config.present_mode {
+            self.config.present_mode = mode;
+            self.configure_surface();
+        }
+    }
+
+    /// Whether presenting waits for the display's refresh.
+    pub fn vsync(&self) -> bool {
+        matches!(
+            self.config.present_mode,
+            wgpu::PresentMode::Fifo | wgpu::PresentMode::FifoRelaxed | wgpu::PresentMode::AutoVsync
+        )
+    }
+
     /// Recreates the swapchain at the latest requested physical size.
     fn configure_surface(&mut self) {
         self.surface.configure(&self.device, &self.config);
         self.configured_size = (self.config.width, self.config.height);
     }
 
-    /// Draws one frame of `list` over `clear` and presents it.
+    /// Draws one frame and presents it: the 3D `scene`, if it has any
+    /// instances, over `clear`, then `list` on top, in a single submission.
     ///
     /// A swapchain that is outdated or lost is reconfigured and the frame
     /// skipped; one that is timed out or hidden skips the frame as well.
-    pub fn render(&mut self, list: &DrawList, clear: Rgba) {
+    pub fn render(&mut self, list: &DrawList, scene: Option<&Scene>, clear: Rgba) {
         self.text.end_frame();
         if self.configured_size != (self.config.width, self.config.height) {
             self.configure_surface();
@@ -234,6 +406,17 @@ impl Renderer {
             }),
         );
 
+        let scene = scene.filter(|scene| !scene.instances.is_empty());
+        if let Some(scene) = scene {
+            self.forward.prepare(
+                &self.device,
+                &self.queue,
+                &self.resources,
+                scene,
+                (self.config.width, self.config.height),
+            );
+        }
+
         self.build_quads(list);
         self.build_glyphs(list);
         if self.atlas.overflowed() {
@@ -256,6 +439,19 @@ impl Renderer {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("forge frame"),
             });
+        let clear_color = wgpu::Color {
+            r: f64::from(clear.r),
+            g: f64::from(clear.g),
+            b: f64::from(clear.b),
+            a: f64::from(clear.a),
+        };
+        let ui_load = if scene.is_some() {
+            self.forward
+                .encode(&mut encoder, &view, clear_color, &self.resources);
+            wgpu::LoadOp::Load
+        } else {
+            wgpu::LoadOp::Clear(clear_color)
+        };
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("forge frame pass"),
@@ -264,12 +460,7 @@ impl Renderer {
                     depth_slice: None,
                     resolve_target: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: f64::from(clear.r),
-                            g: f64::from(clear.g),
-                            b: f64::from(clear.b),
-                            a: f64::from(clear.a),
-                        }),
+                        load: ui_load,
                         store: wgpu::StoreOp::Store,
                     },
                 })],
@@ -390,6 +581,28 @@ impl Renderer {
             });
         }
     }
+}
+
+/// The present mode for `vsync` among the `supported` ones: the vsynced queue
+/// when on, otherwise immediate, else mailbox, else the vsynced queue again.
+fn pick_present_mode(supported: &[wgpu::PresentMode], vsync: bool) -> wgpu::PresentMode {
+    let preferred: &[wgpu::PresentMode] = if vsync {
+        &[]
+    } else {
+        &[wgpu::PresentMode::Immediate, wgpu::PresentMode::Mailbox]
+    };
+    preferred
+        .iter()
+        .copied()
+        .find(|mode| supported.contains(mode))
+        .unwrap_or(wgpu::PresentMode::Fifo)
+}
+
+/// The item at `index` of a table of uploaded handles.
+fn pick_item<T: Copy>(table: &[T], index: usize) -> Result<T, RenderError> {
+    table.get(index).copied().ok_or_else(|| {
+        RenderError::InvalidAsset(format!("a part refers to the missing item {index}"))
+    })
 }
 
 /// Converts a logical clip rectangle to the physical bounds shaders test.

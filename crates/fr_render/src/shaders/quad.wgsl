@@ -38,15 +38,9 @@ fn corner_radius(radii: vec4<f32>, point: vec2<f32>) -> f32 {
 }
 
 fn unit_corner(index: u32) -> vec2<f32> {
-    var corners = array<vec2<f32>, 6>(
-        vec2<f32>(0.0, 0.0),
-        vec2<f32>(1.0, 0.0),
-        vec2<f32>(0.0, 1.0),
-        vec2<f32>(0.0, 1.0),
-        vec2<f32>(1.0, 0.0),
-        vec2<f32>(1.0, 1.0),
-    );
-    return corners[index];
+    let x = index == 1u || index == 4u || index == 5u;
+    let y = index == 2u || index == 3u || index == 5u;
+    return vec2<f32>(select(0.0, 1.0, x), select(0.0, 1.0, y));
 }
 
 fn rounded_box(point: vec2<f32>, half_size: vec2<f32>, radius: f32) -> f32 {
@@ -59,21 +53,21 @@ fn vertex(@builtin(vertex_index) index: u32, instance: Instance) -> Fragment {
     let corner = unit_corner(index);
     let point = instance.origin + corner * instance.size;
 
-    var out: Fragment;
-    out.position = vec4<f32>(
-        point.x / viewport.size.x * 2.0 - 1.0,
-        1.0 - point.y / viewport.size.y * 2.0,
-        0.0,
-        1.0,
+    return Fragment(
+        vec4<f32>(
+            point.x / viewport.size.x * 2.0 - 1.0,
+            1.0 - point.y / viewport.size.y * 2.0,
+            0.0,
+            1.0,
+        ),
+        (corner - vec2<f32>(0.5)) * instance.size,
+        instance.size * 0.5,
+        instance.background,
+        instance.border_color,
+        instance.radii,
+        instance.border,
+        instance.clip,
     );
-    out.local = (corner - vec2<f32>(0.5)) * instance.size;
-    out.half_size = instance.size * 0.5;
-    out.background = instance.background;
-    out.border_color = instance.border_color;
-    out.radii = instance.radii;
-    out.border = instance.border;
-    out.clip = instance.clip;
-    return out;
 }
 
 @fragment
