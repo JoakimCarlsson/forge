@@ -164,6 +164,8 @@ pub(crate) struct Body {
     pub(crate) shapes: Vec<ShapeId>,
     /// The joints of the body in creation order.
     pub(crate) joints: Vec<JointId>,
+    /// The bodies this body never collides with, in the order they were added.
+    pub(crate) ignored: Vec<BodyId>,
     /// The contacts of the body, kept only for bodies that are not static.
     pub(crate) contacts: Vec<ContactId>,
     /// The island the body belongs to, if it is not static.
@@ -220,6 +222,7 @@ impl Body {
             sleep_velocity: 0.0,
             shapes: Vec::new(),
             joints: Vec::new(),
+            ignored: Vec::new(),
             contacts: Vec::new(),
             island: IslandId::NULL,
             island_index: usize::MAX,

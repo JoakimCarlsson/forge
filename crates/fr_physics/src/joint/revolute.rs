@@ -1,5 +1,5 @@
 //! The revolute joint: a hinge about the z axis of the joint frame with an optional angle
-//! limit, spring and motor.
+//! limit, torque limited spring and motor.
 
 use fr_math::Vec3;
 
@@ -27,6 +27,8 @@ pub struct RevoluteJoint {
     pub hertz: f32,
     /// The damping ratio of the spring.
     pub damping_ratio: f32,
+    /// The largest torque of the spring; unlimited by default.
+    pub max_spring_torque: f32,
     /// The angle the spring pulls towards.
     pub target_angle: f32,
     /// Whether the motor drives the angular speed.
@@ -69,6 +71,7 @@ impl Default for RevoluteJoint {
             enable_spring: false,
             hertz: 0.0,
             damping_ratio: 0.0,
+            max_spring_torque: f32::MAX,
             target_angle: 0.0,
             enable_motor: false,
             motor_speed: 0.0,
@@ -174,7 +177,10 @@ impl RevoluteJoint {
             let cdot = (w_b - w_a).dot(axis);
             let delta =
                 -mass_scale * self.axial_mass * (cdot + bias) - impulse_scale * self.spring_impulse;
-            self.spring_impulse += delta;
+            let max_impulse = self.max_spring_torque * ctx.h;
+            let new_impulse = (self.spring_impulse + delta).clamp(-max_impulse, max_impulse);
+            let delta = new_impulse - self.spring_impulse;
+            self.spring_impulse = new_impulse;
             w_a = mul_sub(w_a, delta, i_a * axis);
             w_b = mul_add(w_b, delta, i_b * axis);
         }

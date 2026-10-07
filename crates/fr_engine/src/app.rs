@@ -1,7 +1,7 @@
 //! The game-facing trait, frame description and input events.
 
 use fr_color::Rgba;
-use fr_input::{ButtonState, KeyEvent, PointerButton, ScrollDelta};
+use fr_input::{ButtonState, CursorMode, KeyEvent, PointerButton, ScrollDelta};
 use fr_render::Scene;
 use fr_ui::{Div, Theme, div};
 
@@ -18,6 +18,8 @@ pub struct Frame {
     pub width: u32,
     /// The window's drawable height in physical pixels.
     pub height: u32,
+    /// The physical pixels per logical pixel, which pointer positions are measured in.
+    pub scale_factor: f32,
     /// How far this frame is into the next fixed step, in zero to one: the blend factor for
     /// drawing between the last two states of a fixed update.
     pub interpolation: f32,
@@ -47,6 +49,13 @@ pub enum Input {
     },
     /// The pointer left the window.
     PointerLeft,
+    /// The pointer moved by `dx`, `dy` in device units, also while the cursor is captured.
+    PointerMotion {
+        /// Horizontal motion, positive to the right.
+        dx: f32,
+        /// Vertical motion, positive downwards.
+        dy: f32,
+    },
     /// A pointer button went down or came up.
     PointerButton {
         /// Which button.
@@ -103,6 +112,11 @@ pub trait App {
     /// frames are uncapped unless this returns true.
     fn vsync(&self) -> bool {
         false
+    }
+
+    /// Whether the cursor is hidden and captured. Asked every frame.
+    fn cursor_mode(&self) -> CursorMode {
+        CursorMode::Normal
     }
 
     /// Handles input the UI did not take.

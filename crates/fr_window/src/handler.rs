@@ -27,6 +27,10 @@ pub trait WindowHandler {
     /// Called when the pointer leaves the window.
     fn pointer_left(&mut self);
 
+    /// Called with the relative pointer motion in device units, which keeps arriving while the
+    /// cursor is captured.
+    fn pointer_motion(&mut self, _dx: f32, _dy: f32) {}
+
     /// Called when a pointer button goes down or comes up.
     fn pointer_button(&mut self, button: PointerButton, state: ButtonState);
 
@@ -72,6 +76,11 @@ impl<H: WindowHandler + ?Sized> WindowHandler for &mut H {
     /// Forwards to the borrowed handler.
     fn pointer_left(&mut self) {
         (**self).pointer_left();
+    }
+
+    /// Forwards to the borrowed handler.
+    fn pointer_motion(&mut self, dx: f32, dy: f32) {
+        (**self).pointer_motion(dx, dy);
     }
 
     /// Forwards to the borrowed handler.

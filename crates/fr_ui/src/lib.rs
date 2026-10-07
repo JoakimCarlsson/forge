@@ -31,6 +31,6 @@ pub use text::{Text, text};
 pub use theme::{Colors, Emphasis, Font, Radii, Sizes, TextScale, TextSize, Theme};
 pub use ui::Ui;
 pub use widgets::{
-    Button, ButtonVariant, Checkbox, Switch, ToggleState, button, checkbox, icon_button, rule,
-    section, switch, tinted_icon_button,
+    Button, ButtonVariant, Checkbox, Slider, Switch, ToggleState, button, checkbox, icon_button,
+    rule, section, slider, switch, tinted_icon_button,
 };

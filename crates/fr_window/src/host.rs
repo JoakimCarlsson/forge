@@ -8,11 +8,11 @@ use raw_window_handle::{
 };
 use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
-use winit::event::WindowEvent;
+use winit::event::{DeviceEvent, DeviceId, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, EventLoop};
-use winit::window::{WindowAttributes, WindowId};
+use winit::window::{CursorGrabMode, WindowAttributes, WindowId};
 
-use fr_input::{ButtonState, KeyEvent, Modifiers};
+use fr_input::{ButtonState, CursorMode, KeyEvent, Modifiers};
 
 use crate::convert;
 use crate::{WindowConfig, WindowHandler};
@@ -65,6 +65,25 @@ impl Window {
     #[must_use]
     pub fn scale_factor(&self) -> f64 {
         self.inner.scale_factor()
+    }
+
+    /// Hides and captures the cursor, or shows and frees it.
+    ///
+    /// Capturing locks the cursor where the platform allows and otherwise confines it to the
+    /// window; relative motion is reported either way.
+    pub fn set_cursor_mode(&self, mode: CursorMode) {
+        match mode {
+            CursorMode::Normal => {
+                let _freed = self.inner.set_cursor_grab(CursorGrabMode::None);
+                self.inner.set_cursor_visible(true);
+            }
+            CursorMode::Captured => {
+                if self.inner.set_cursor_grab(CursorGrabMode::Locked).is_err() {
+                    let _confined = self.inner.set_cursor_grab(CursorGrabMode::Confined);
+                }
+                self.inner.set_cursor_visible(false);
+            }
+        }
     }
 
     /// Asks for the window to be redrawn.
@@ -126,6 +145,13 @@ impl<H: WindowHandler> ApplicationHandler for Host<H> {
                 self.error = Some(WindowError::Window(error));
                 event_loop.exit();
             }
+        }
+    }
+
+    /// Reports relative pointer motion to the handler.
+    fn device_event(&mut self, _event_loop: &ActiveEventLoop, _id: DeviceId, event: DeviceEvent) {
+        if let DeviceEvent::MouseMotion { delta } = event {
+            self.handler.pointer_motion(delta.0 as f32, delta.1 as f32);
         }
     }
 

@@ -6,6 +6,7 @@
 
 use fr_math::{Plane, Vec3};
 
+use crate::collider::{CapsuleCollider, SphereCollider};
 use crate::constants::{
     LINEAR_SLOP, MAX_CLIP_POINTS, MAX_MANIFOLD_POINTS, MIN_CAPSULE_LENGTH, NULL_INDEX,
     SPECULATIVE_DISTANCE,
@@ -13,7 +14,7 @@ use crate::constants::{
 use crate::distance::{
     DistanceInput, SimplexCache, line_distance, point_to_segment, segment_distance, shape_distance,
 };
-use crate::geometry::{Capsule, ShapeProxy, Sphere};
+use crate::geometry::ShapeProxy;
 use crate::hull::Hull;
 use crate::math::{Pose, arbitrary_perp, length_and_normalize, mul_add, mul_sub, normalize};
 use crate::sat::{AxisKind, SeparatingAxis, compute_separating_axis};
@@ -223,7 +224,7 @@ fn clip_segment_to_hull_face(segment: &mut [ClipVertex; 2], hull: &Hull, face: u
 }
 
 /// The core segment of capsule B in the frame of A as clip vertices.
-fn capsule_segment(capsule: &Capsule, b_to_a: &Pose) -> [ClipVertex; 2] {
+fn capsule_segment(capsule: &CapsuleCollider, b_to_a: &Pose) -> [ClipVertex; 2] {
     [
         ClipVertex {
             position: b_to_a.transform_point(capsule.center1()),
@@ -241,7 +242,7 @@ fn capsule_segment(capsule: &Capsule, b_to_a: &Pose) -> [ClipVertex; 2] {
 /// The hull face most separating a capsule, with the capsule point that is deepest behind it.
 fn query_face_direction_hull_and_capsule(
     hull: &Hull,
-    capsule: &Capsule,
+    capsule: &CapsuleCollider,
     b_to_a: &Pose,
 ) -> SeparatingAxis {
     let points = [
@@ -272,7 +273,7 @@ fn query_face_direction_hull_and_capsule(
 /// The hull edge that best separates a capsule axis from the hull.
 fn query_edge_direction_hull_and_capsule(
     hull: &Hull,
-    capsule: &Capsule,
+    capsule: &CapsuleCollider,
     b_to_a: &Pose,
 ) -> SeparatingAxis {
     let mut best = SeparatingAxis {
@@ -316,7 +317,11 @@ fn query_edge_direction_hull_and_capsule(
 }
 
 /// The manifold of two spheres.
-pub fn collide_spheres(sphere_a: &Sphere, sphere_b: &Sphere, b_to_a: &Pose) -> LocalManifold {
+pub fn collide_spheres(
+    sphere_a: &SphereCollider,
+    sphere_b: &SphereCollider,
+    b_to_a: &Pose,
+) -> LocalManifold {
     let center1 = sphere_a.center;
     let center2 = b_to_a.transform_point(sphere_b.center);
     let total_radius = sphere_a.radius + sphere_b.radius;
@@ -340,8 +345,8 @@ pub fn collide_spheres(sphere_a: &Sphere, sphere_b: &Sphere, b_to_a: &Pose) -> L
 
 /// The manifold of a capsule A and a sphere B.
 pub fn collide_capsule_and_sphere(
-    capsule_a: &Capsule,
-    sphere_b: &Sphere,
+    capsule_a: &CapsuleCollider,
+    sphere_b: &SphereCollider,
     b_to_a: &Pose,
 ) -> LocalManifold {
     let center = b_to_a.transform_point(sphere_b.center);
@@ -368,7 +373,7 @@ pub fn collide_capsule_and_sphere(
 /// The manifold of a hull A and a sphere B.
 pub fn collide_hull_and_sphere(
     hull_a: &Hull,
-    sphere_b: &Sphere,
+    sphere_b: &SphereCollider,
     b_to_a: &Pose,
     cache: &mut SimplexCache,
 ) -> LocalManifold {
@@ -425,7 +430,11 @@ pub fn collide_hull_and_sphere(
 }
 
 /// The manifold of two capsules.
-pub fn collide_capsules(capsule_a: &Capsule, capsule_b: &Capsule, b_to_a: &Pose) -> LocalManifold {
+pub fn collide_capsules(
+    capsule_a: &CapsuleCollider,
+    capsule_b: &CapsuleCollider,
+    b_to_a: &Pose,
+) -> LocalManifold {
     let center_a1 = capsule_a.center1();
     let center_a2 = capsule_a.center2();
     let center_b1 = b_to_a.transform_point(capsule_b.center1());
@@ -519,7 +528,7 @@ pub fn collide_capsules(capsule_a: &Capsule, capsule_b: &Capsule, b_to_a: &Pose)
 /// Builds a two point manifold from a capsule clipped to the reference face of a hull.
 fn hull_face_capsule_points(
     hull_a: &Hull,
-    capsule_b: &Capsule,
+    capsule_b: &CapsuleCollider,
     segment: &[ClipVertex; 2],
     ref_face: usize,
     allowed: f32,
@@ -559,7 +568,7 @@ fn hull_face_capsule_points(
 /// Builds a one point manifold from the closest points of a hull edge and a capsule axis.
 fn build_hull_and_capsule_edge_contact(
     hull_a: &Hull,
-    capsule_b: &Capsule,
+    capsule_b: &CapsuleCollider,
     b_to_a: &Pose,
     query: &SeparatingAxis,
 ) -> Option<LocalManifold> {
@@ -586,7 +595,7 @@ fn build_hull_and_capsule_edge_contact(
 /// The manifold of a hull A and a capsule B.
 pub fn collide_hull_and_capsule(
     hull_a: &Hull,
-    capsule_b: &Capsule,
+    capsule_b: &CapsuleCollider,
     b_to_a: &Pose,
     cache: &mut SimplexCache,
 ) -> LocalManifold {

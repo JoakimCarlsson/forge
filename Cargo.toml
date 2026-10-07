@@ -21,7 +21,6 @@ fr_mesh = { version = "0.1.0", path = "crates/fr_mesh" }
 fr_material = { version = "0.1.0", path = "crates/fr_material" }
 fr_light = { version = "0.1.0", path = "crates/fr_light" }
 fr_camera = { version = "0.1.0", path = "crates/fr_camera" }
-fr_skeleton = { version = "0.1.0", path = "crates/fr_skeleton" }
 fr_assets = { version = "0.1.0", path = "crates/fr_assets" }
 fr_physics = { version = "0.1.0", path = "crates/fr_physics" }
 fr_window = { version = "0.1.0", path = "crates/fr_window" }

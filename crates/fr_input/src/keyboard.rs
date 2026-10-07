@@ -44,6 +44,10 @@ pub enum Key {
     Home,
     /// The end key.
     End,
+    /// Either shift key.
+    Shift,
+    /// Either control key.
+    Control,
     /// Any other key.
     Other,
 }

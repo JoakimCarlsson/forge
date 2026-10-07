@@ -67,6 +67,8 @@ pub(crate) fn key(key: &WinitKey) -> Key {
         WinitKey::Named(NamedKey::ArrowRight) => Key::ArrowRight,
         WinitKey::Named(NamedKey::Home) => Key::Home,
         WinitKey::Named(NamedKey::End) => Key::End,
+        WinitKey::Named(NamedKey::Shift) => Key::Shift,
+        WinitKey::Named(NamedKey::Control) => Key::Control,
         _ => Key::Other,
     }
 }

@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use fr_input::{ButtonState, KeyEvent, PointerButton, ScrollDelta};
+use fr_input::{ButtonState, CursorMode, KeyEvent, PointerButton, ScrollDelta};
 use fr_math::{Point, Size};
 use fr_render::{DrawList, RenderError, Renderer, Scene};
 use fr_time::{FixedStepper, FrameClock};
@@ -47,6 +47,10 @@ const MAX_FIXED_STEPS_PER_FRAME: u32 = 8;
 struct Host<A: App> {
     /// The game being driven.
     app: A,
+    /// The window, once it exists.
+    window: Option<Window>,
+    /// The cursor mode the window was last given.
+    cursor_mode: CursorMode,
     /// The renderer, once the window exists.
     renderer: Option<Renderer>,
     /// The UI state that outlives each frame's tree.
@@ -77,6 +81,17 @@ impl<A: App> Host<A> {
         }
     }
 
+    /// Gives the window the cursor mode the app asks for when it changed.
+    fn apply_cursor_mode(&mut self) {
+        let mode = self.app.cursor_mode();
+        if mode != self.cursor_mode
+            && let Some(window) = &self.window
+        {
+            window.set_cursor_mode(mode);
+            self.cursor_mode = mode;
+        }
+    }
+
     /// Applies the message a control sent, if it sent one.
     fn deliver(&mut self, message: Option<A::Message>) {
         if let Some(message) = message {
@@ -90,6 +105,7 @@ impl<A: App> WindowHandler for Host<A> {
     fn created(&mut self, window: &Window) {
         self.size = window.size();
         self.scale_factor = window.scale_factor();
+        self.window = Some(window.clone());
         match Renderer::new(
             window.clone(),
             self.size.0,
@@ -118,6 +134,7 @@ impl<A: App> WindowHandler for Host<A> {
 
     /// Updates the game, builds its tree, then draws the frame.
     fn redraw(&mut self) {
+        self.apply_cursor_mode();
         let Some(renderer) = &mut self.renderer else {
             return;
         };
@@ -138,6 +155,7 @@ impl<A: App> WindowHandler for Host<A> {
             index: self.clock.frame(),
             width: self.size.0,
             height: self.size.1,
+            scale_factor: self.scale_factor as f32,
             interpolation: self.stepper.alpha(),
         });
 
@@ -164,8 +182,14 @@ impl<A: App> WindowHandler for Host<A> {
 
     /// Moves the pointer in the UI.
     fn pointer_moved(&mut self, x: f32, y: f32) {
-        self.ui.pointer_moved(Point::new(x, y));
+        let message = self.ui.pointer_moved(Point::new(x, y));
+        self.deliver(message);
         self.app.input(&Input::PointerMoved { x, y });
+    }
+
+    /// Reports relative pointer motion to the app.
+    fn pointer_motion(&mut self, dx: f32, dy: f32) {
+        self.app.input(&Input::PointerMotion { dx, dy });
     }
 
     /// Takes the pointer out of the UI.
@@ -211,6 +235,8 @@ pub fn run<A: App>(title: &str, app: A) -> Result<(), EngineError> {
     let ui = Ui::new(Theme::default());
     let mut host = Host {
         app,
+        window: None,
+        cursor_mode: CursorMode::Normal,
         renderer: None,
         ui,
         list: DrawList::new(Size::zero()),

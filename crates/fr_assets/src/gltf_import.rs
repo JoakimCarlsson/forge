@@ -5,8 +5,8 @@
 //! textures and `KHR_materials_emissive_strength`; samplers; and the default
 //! scene's node hierarchy, flattened to world transforms; and
 //! `KHR_lights_punctual` lights, with their intensities passed through as
-//! written. Skins are read only as a [`Skeleton`] of joint nodes (see
-//! [`load_skeleton`]). Not read: vertex colours, further texture coordinate
+//! written. Skins are read only as a [`SkinData`]: a hierarchy of the joint
+//! nodes and a skin over it (see [`load_skin`]). Not read: vertex colours, further texture coordinate
 //! sets, skinned meshes, weights, animations and cameras.
 
 use std::collections::{HashMap, HashSet};
@@ -16,14 +16,13 @@ use fr_image::{Filter, ImageData, SamplerData, TextureData, Wrap};
 use fr_light::{DirectionalLight, Light, PointLight, SpotLight};
 use fr_material::{AlphaMode, MaterialData};
 use fr_math::{Mat4, Vec2, Vec3, Vec4};
-use fr_mesh::MeshData;
-use fr_skeleton::{Bone, Skeleton, SkeletonError};
-use fr_transform::Transform;
+use fr_mesh::{MeshData, Skin};
+use fr_transform::{Hierarchy, Node, Transform};
 use gltf::image::Format;
 use gltf::mesh::Mode;
 
-use crate::error::AssetError;
-use crate::model::{ModelData, ModelPart};
+use crate::error::{AssetError, SkinImportError};
+use crate::model::{ModelData, ModelPart, SkinData};
 
 /// The deepest node nesting accepted before the file is called malformed.
 const MAX_NODE_DEPTH: usize = 256;
@@ -88,7 +87,7 @@ pub fn load_gltf(path: impl AsRef<Path>) -> Result<ModelData, AssetError> {
     })
 }
 
-/// Reads the first skin of the glTF or GLB file at `path` as a [`Skeleton`], or
+/// Reads the first skin of the glTF or GLB file at `path` as a [`SkinData`], or
 /// `None` when the file has no skin.
 ///
 /// Only the document is parsed: buffers and images are not loaded.
@@ -96,8 +95,8 @@ pub fn load_gltf(path: impl AsRef<Path>) -> Result<ModelData, AssetError> {
 /// # Errors
 ///
 /// Returns [`AssetError`] when the file cannot be read or parsed, or when its
-/// joints do not form a valid skeleton.
-pub fn load_skeleton(path: impl AsRef<Path>) -> Result<Option<Skeleton>, AssetError> {
+/// joints do not form a valid hierarchy and skin.
+pub fn load_skin(path: impl AsRef<Path>) -> Result<Option<SkinData>, AssetError> {
     let path = path.as_ref();
     let document = gltf::Gltf::open(path)
         .map_err(|source| AssetError::import(path, source))?
@@ -106,27 +105,29 @@ pub fn load_skeleton(path: impl AsRef<Path>) -> Result<Option<Skeleton>, AssetEr
         .skins()
         .next()
         .map(|skin| {
-            skeleton_from_skin(&document, &skin)
+            skin_from_gltf(&document, &skin)
                 .map_err(|error| AssetError::malformed(path, error.to_string()))
         })
         .transpose()
 }
 
-/// Turns the joint nodes of `skin` into a [`Skeleton`] in model space.
+/// Turns the joint nodes of `skin` into a [`SkinData`] in model space.
 ///
-/// Bones keep the skin's joint order, except that a parent is moved ahead of its
-/// first child when it comes later. A joint whose parent node is not a joint is a
-/// root, and its bind pose includes every ancestor node above it. Names come
-/// from the nodes, falling back to `bone{node index}`, and repeats get a
-/// numeric suffix. Scale is dropped.
+/// The hierarchy holds the joint nodes in the skin's joint order, except that a
+/// parent is moved ahead of its first child when it comes later. A joint whose
+/// parent node is not a joint is a root, and its bind pose includes every
+/// ancestor node above it. Names come from the nodes, falling back to
+/// `bone{node index}`, and repeats get a numeric suffix. The skin lists the
+/// joints in the skin's own order; its inverse bind matrices are those of the
+/// bind pose, not read from the skin's accessor.
 ///
 /// # Errors
 ///
-/// Returns [`SkeletonError`] when the result is not a valid skeleton.
-pub fn skeleton_from_skin(
+/// Returns [`SkinImportError`] when the result is not a valid hierarchy or skin.
+pub fn skin_from_gltf(
     document: &gltf::Document,
     skin: &gltf::Skin<'_>,
-) -> Result<Skeleton, SkeletonError> {
+) -> Result<SkinData, SkinImportError> {
     let parents = node_parents(document);
     let joints: Vec<usize> = skin.joints().map(|joint| joint.index()).collect();
     let joint_parent = |node: usize| {
@@ -144,19 +145,25 @@ pub fn skeleton_from_skin(
     let nodes: HashMap<usize, gltf::Node<'_>> =
         document.nodes().map(|node| (node.index(), node)).collect();
     let mut used = HashSet::new();
-    let bones = order
+    let list = order
         .iter()
         .filter_map(|node| nodes.get(node))
         .map(|node| {
             let parent = joint_parent(node.index()).and_then(|parent| slots.get(&parent).copied());
-            Bone {
-                name: unique_name(node, &mut used),
+            Node::new(
+                unique_name(node, &mut used),
                 parent,
-                bind_local: bind_local(node, parent.is_some(), &parents, &nodes),
-            }
+                bind_local(node, parent.is_some(), &parents, &nodes),
+            )
         })
         .collect();
-    Skeleton::new(bones)
+    let hierarchy = Hierarchy::new(list)?;
+    let skin_order = joints
+        .iter()
+        .filter_map(|node| slots.get(node).copied())
+        .collect();
+    let skin = Skin::from_bind_pose(&hierarchy, skin_order)?;
+    Ok(SkinData { hierarchy, skin })
 }
 
 /// Maps each node that is somebody's child to its parent.
@@ -221,7 +228,7 @@ fn bind_local(
         matrix = Mat4::from_cols_array_2d(&ancestor.transform().matrix()) * matrix;
         current = ancestor.index();
     }
-    Transform::from_matrix(matrix).with_scale(Vec3::ONE)
+    Transform::from_matrix(matrix)
 }
 
 /// What the node hierarchy places: mesh parts and lights.

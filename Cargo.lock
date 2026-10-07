@@ -608,7 +608,6 @@ dependencies = [
  "fr_material",
  "fr_math",
  "fr_mesh",
- "fr_skeleton",
  "fr_transform",
  "gltf",
 ]
@@ -639,7 +638,6 @@ dependencies = [
  "fr_mesh",
  "fr_physics",
  "fr_render",
- "fr_skeleton",
  "fr_time",
  "fr_transform",
  "fr_ui",
@@ -692,6 +690,7 @@ version = "0.1.0"
 dependencies = [
  "fr_handle",
  "fr_math",
+ "fr_transform",
 ]
 
 [[package]]
@@ -699,7 +698,6 @@ name = "fr_physics"
 version = "0.1.0"
 dependencies = [
  "fr_math",
- "fr_skeleton",
  "fr_transform",
 ]
 
@@ -722,14 +720,6 @@ dependencies = [
  "raw-window-handle",
  "resvg",
  "wgpu",
-]
-
-[[package]]
-name = "fr_skeleton"
-version = "0.1.0"
-dependencies = [
- "fr_math",
- "fr_transform",
 ]
 
 [[package]]

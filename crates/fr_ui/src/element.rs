@@ -55,6 +55,10 @@ pub enum RegionAction<M> {
     Inert,
     /// Sends one message when a press and release both land in the region.
     Click(M),
+    /// Sends a message for the pointer's position across the region on a press and on every
+    /// move while the pointer is held, as a fraction from zero at the left edge to one at the
+    /// right edge, clamped.
+    Slide(Box<dyn Fn(f32) -> M>),
 }
 
 /// What an interactive element needs to know to paint itself.
@@ -197,6 +201,19 @@ impl<'a, 'b, M> PaintContext<'a, 'b, M> {
                 Some(message) => RegionAction::Click(message),
                 None => RegionAction::Inert,
             },
+        });
+        self.interaction(bounds, index)
+    }
+
+    /// Registers `bounds` as a region that sends `on_slide` with the pointer's fraction across
+    /// it on a press and while the pointer is dragged, even outside the region.
+    ///
+    /// The returned state is what the element paints itself from.
+    pub fn slidable(&mut self, bounds: Rect, on_slide: Box<dyn Fn(f32) -> M>) -> Interaction {
+        let index = self.regions.len();
+        self.regions.push(Region {
+            bounds,
+            action: RegionAction::Slide(on_slide),
         });
         self.interaction(bounds, index)
     }

@@ -11,6 +11,7 @@ mod checkbox;
 mod icon_button;
 mod rule;
 mod section;
+mod slider;
 mod switch;
 
 pub use button::{Button, ButtonVariant, button};
@@ -18,4 +19,5 @@ pub use checkbox::{Checkbox, ToggleState, checkbox};
 pub use icon_button::{icon_button, tinted_icon_button};
 pub use rule::rule;
 pub use section::section;
+pub use slider::{Slider, slider};
 pub use switch::{Switch, switch};

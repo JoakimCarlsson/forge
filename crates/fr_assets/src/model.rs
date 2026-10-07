@@ -3,8 +3,8 @@
 use fr_image::{ImageData, TextureData};
 use fr_light::Light;
 use fr_material::MaterialData;
-use fr_mesh::MeshData;
-use fr_transform::Transform;
+use fr_mesh::{MeshData, Skin};
+use fr_transform::{Hierarchy, Transform};
 
 /// One mesh placed in the model with one material.
 #[derive(Clone, Debug, PartialEq)]
@@ -34,4 +34,13 @@ pub struct ModelData {
     pub parts: Vec<ModelPart>,
     /// The lights, placed in the model's space.
     pub lights: Vec<Light>,
+}
+
+/// A skin: the hierarchy of its joint nodes and the skin that binds meshes to them.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SkinData {
+    /// The joint nodes, parents first, at their bind pose.
+    pub hierarchy: Hierarchy,
+    /// The joints in the order the skin lists them.
+    pub skin: Skin,
 }

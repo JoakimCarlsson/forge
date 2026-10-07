@@ -13,3 +13,4 @@ workspace = true
 [dependencies]
 fr_math.workspace = true
 fr_handle.workspace = true
+fr_transform.workspace = true

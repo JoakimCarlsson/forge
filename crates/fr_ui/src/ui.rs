@@ -20,6 +20,8 @@ pub struct Ui<M> {
     input: Input,
     /// The region holding keyboard focus, as an index into `regions`.
     focus: Option<usize>,
+    /// The sliding region the pointer is held on, as an index into `regions`.
+    dragging: Option<usize>,
     /// The regions painted by the last frame, in paint order.
     regions: Vec<Region<M>>,
 }
@@ -31,6 +33,7 @@ impl<M> Ui<M> {
             theme,
             input: Input::default(),
             focus: None,
+            dragging: None,
             regions: Vec::new(),
         }
     }
@@ -40,19 +43,22 @@ impl<M> Ui<M> {
         &self.theme
     }
 
-    /// Records the pointer at `pointer`, in logical pixels.
-    pub fn pointer_moved(&mut self, pointer: Point) {
+    /// Records the pointer at `pointer`, in logical pixels, returning the message of the
+    /// sliding region it is dragging, if any.
+    pub fn pointer_moved(&mut self, pointer: Point) -> Option<M> {
         self.input.pointer = Some(pointer);
+        self.slide_message(self.dragging?, pointer)
     }
 
     /// Records the pointer leaving the window.
     pub fn pointer_left(&mut self) {
         self.input.pointer = None;
         self.input.pressed_at = None;
+        self.dragging = None;
     }
 
-    /// Routes a pointer button going down or coming up, returning the message of the region a
-    /// primary click completed on.
+    /// Routes a pointer button going down or coming up, returning the message of the sliding
+    /// region a primary press landed on or of the region a primary click completed on.
     pub fn pointer_button(&mut self, button: PointerButton, state: ButtonState) -> Option<M>
     where
         M: Clone,
@@ -61,10 +67,7 @@ impl<M> Ui<M> {
             return None;
         }
         match state {
-            ButtonState::Pressed => {
-                self.pointer_pressed();
-                None
-            }
+            ButtonState::Pressed => self.pointer_pressed(),
             ButtonState::Released => self.pointer_released(),
         }
     }
@@ -88,10 +91,32 @@ impl<M> Ui<M> {
         None
     }
 
-    /// Records a press and leaves keyboard focus to keyboard navigation.
-    fn pointer_pressed(&mut self) {
+    /// Records a press and leaves keyboard focus to keyboard navigation, returning the message
+    /// of the sliding region the press landed on.
+    fn pointer_pressed(&mut self) -> Option<M> {
         self.input.pressed_at = self.input.pointer;
         self.focus = None;
+        let pointer = self.input.pointer?;
+        let index = self
+            .region_at(pointer)
+            .filter(|&index| matches!(self.regions[index].action, RegionAction::Slide(_)))?;
+        self.dragging = Some(index);
+        self.slide_message(index, pointer)
+    }
+
+    /// The message of the sliding region at `index` for a pointer at `pointer`.
+    fn slide_message(&self, index: usize, pointer: Point) -> Option<M> {
+        let region = self.regions.get(index)?;
+        let RegionAction::Slide(on_slide) = &region.action else {
+            return None;
+        };
+        let width = region.bounds.size.width;
+        let fraction = if width > 0.0 {
+            ((pointer.x - region.bounds.left()) / width).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        Some(on_slide(fraction))
     }
 
     /// Records a release, returning the message of the region it completed on.
@@ -102,14 +127,18 @@ impl<M> Ui<M> {
     where
         M: Clone,
     {
-        let pressed_at = self.input.pressed_at.take()?;
+        let pressed_at = self.input.pressed_at.take();
+        if self.dragging.take().is_some() {
+            return None;
+        }
+        let pressed_at = pressed_at?;
         let pointer = self.input.pointer?;
         let region = &self.regions[self.region_at(pointer)?];
         match &region.action {
             RegionAction::Click(message) if region.bounds.contains(pressed_at) => {
                 Some(message.clone())
             }
-            RegionAction::Click(_) | RegionAction::Inert => None,
+            RegionAction::Click(_) | RegionAction::Slide(_) | RegionAction::Inert => None,
         }
     }
 
@@ -136,7 +165,7 @@ impl<M> Ui<M> {
         let index = self.focus?;
         match &self.regions.get(index)?.action {
             RegionAction::Click(message) => Some(message.clone()),
-            RegionAction::Inert => None,
+            RegionAction::Slide(_) | RegionAction::Inert => None,
         }
     }
 

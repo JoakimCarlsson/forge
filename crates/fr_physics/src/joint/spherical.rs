@@ -1,5 +1,5 @@
 //! The spherical joint: a point to point constraint with optional cone and twist limits, a
-//! rotation spring towards a target and a motor.
+//! torque limited rotation spring towards a target and a motor.
 
 use fr_math::{Mat3, Quat, Vec3};
 
@@ -30,6 +30,8 @@ pub struct SphericalJoint {
     pub hertz: f32,
     /// The damping ratio of the spring.
     pub damping_ratio: f32,
+    /// The largest torque of the spring; unlimited by default.
+    pub max_spring_torque: f32,
     /// The relative rotation of frame B in frame A the spring pulls towards.
     pub target_rotation: Quat,
     /// Whether the motor drives the relative angular velocity.
@@ -76,6 +78,7 @@ impl Default for SphericalJoint {
             enable_spring: false,
             hertz: 0.0,
             damping_ratio: 0.0,
+            max_spring_torque: f32::MAX,
             target_rotation: Quat::IDENTITY,
             enable_motor: false,
             motor_velocity: Vec3::ZERO,
@@ -192,7 +195,14 @@ impl SphericalJoint {
                 impulse_scale,
                 self.spring_impulse,
             );
-            self.spring_impulse += impulse;
+            let mut new_impulse = self.spring_impulse + impulse;
+            let length = new_impulse.length();
+            let max_impulse = self.max_spring_torque * ctx.h;
+            if length > max_impulse {
+                new_impulse *= max_impulse / length;
+            }
+            let impulse = new_impulse - self.spring_impulse;
+            self.spring_impulse = new_impulse;
             w_a -= i_a * impulse;
             w_b += i_b * impulse;
         }

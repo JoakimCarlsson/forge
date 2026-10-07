@@ -4,6 +4,9 @@ use std::error::Error;
 use std::fmt;
 use std::path::PathBuf;
 
+use fr_mesh::SkinError;
+use fr_transform::HierarchyError;
+
 /// A failure to read or interpret an asset file.
 #[derive(Debug)]
 pub enum AssetError {
@@ -65,5 +68,48 @@ impl Error for AssetError {
             Self::Import { source, .. } => Some(source.as_ref()),
             Self::Malformed { .. } => None,
         }
+    }
+}
+
+/// Why the joints of a skin do not form a valid hierarchy and skin.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SkinImportError {
+    /// The joint nodes do not form a valid hierarchy.
+    Hierarchy(HierarchyError),
+    /// The joints do not form a valid skin.
+    Skin(SkinError),
+}
+
+impl fmt::Display for SkinImportError {
+    /// Writes the underlying cause.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Hierarchy(error) => error.fmt(f),
+            Self::Skin(error) => error.fmt(f),
+        }
+    }
+}
+
+impl Error for SkinImportError {
+    /// The hierarchy or skin error.
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::Hierarchy(error) => Some(error),
+            Self::Skin(error) => Some(error),
+        }
+    }
+}
+
+impl From<HierarchyError> for SkinImportError {
+    /// Wraps a hierarchy error.
+    fn from(error: HierarchyError) -> Self {
+        Self::Hierarchy(error)
+    }
+}
+
+impl From<SkinError> for SkinImportError {
+    /// Wraps a skin error.
+    fn from(error: SkinError) -> Self {
+        Self::Skin(error)
     }
 }

@@ -2,7 +2,7 @@
 //!
 //! Every engine crate a game needs is re-exported under a short module name:
 //! [`math`], [`color`], [`time`], [`transform`], [`input`], [`light`], [`mesh`],
-//! [`image`], [`material`], [`camera`], [`skeleton`], [`assets`], [`physics`],
+//! [`image`], [`material`], [`camera`], [`assets`], [`physics`],
 //! [`render`] and [`ui`]. A game describes its 3D scene each frame with
 //! [`App::scene`], loading meshes, materials and glTF models through [`Assets`]
 //! in [`App::init`]. It steps its own [`physics::world::World`] from
@@ -25,7 +25,6 @@ pub use fr_math as math;
 pub use fr_mesh as mesh;
 pub use fr_physics as physics;
 pub use fr_render as render;
-pub use fr_skeleton as skeleton;
 pub use fr_time as time;
 pub use fr_transform as transform;
 pub use fr_ui as ui;

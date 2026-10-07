@@ -2,10 +2,12 @@
 //!
 //! A port of the Box3D physics engine: soft step solver with relaxation and restitution,
 //! speculative contacts, a dynamic AABB tree broad phase, persistent islands with sleeping and
-//! joints with limits, springs and motors.
+//! joints with limits, springs and motors, and data driven rigs of bodies and joints on a
+//! transform hierarchy.
 
 pub mod body;
 mod broad_phase;
+pub mod collider;
 pub mod constants;
 pub mod contact;
 mod contact_solver;
@@ -19,7 +21,7 @@ pub mod joint;
 pub mod manifold;
 pub mod math;
 pub mod query;
-pub mod ragdoll;
+pub mod rig;
 pub mod sat;
 mod sensor;
 pub mod shape;

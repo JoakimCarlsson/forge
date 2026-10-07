@@ -1,10 +1,12 @@
 //! Joints between two bodies: spherical with cone and twist limits, revolute with angle limits,
-//! weld, distance and filter joints, solved in the soft step loop with the contacts.
+//! weld, distance, mouse and filter joints, solved in the soft step loop with the contacts.
 //!
 //! The local frame of a joint on each body places its anchor and its axes: the z axis of the
 //! frame on body A is the cone axis of a spherical joint and the hinge axis of a revolute joint.
 
 mod distance;
+mod motor;
+mod mouse;
 mod revolute;
 mod spherical;
 mod weld;
@@ -18,6 +20,8 @@ use crate::slot::Handle;
 use crate::solver::{BodyState, StepContext};
 
 pub use distance::DistanceJoint;
+pub use motor::JointMotor;
+pub use mouse::MouseJoint;
 pub use revolute::RevoluteJoint;
 pub use spherical::SphericalJoint;
 pub use weld::WeldJoint;
@@ -40,6 +44,8 @@ pub enum JointKind {
     Weld(WeldJoint),
     /// Keeps two anchors at a distance, with optional spring, limits and motor.
     Distance(DistanceJoint),
+    /// Pulls a point of body B towards a world target with a spring and a force limit.
+    Mouse(MouseJoint),
     /// Does nothing but disable collision between the two bodies and keep them in one island.
     Filter,
 }
@@ -112,6 +118,8 @@ pub(crate) struct JointSim {
     pub(crate) frame_b: Pose,
     /// The vector from the centre of mass of A to that of B.
     pub(crate) delta_center: Vec3,
+    /// The centre of mass of B in the world.
+    pub(crate) center_b: Vec3,
 }
 
 impl JointSim {
@@ -128,6 +136,7 @@ impl JointSim {
         frame_a: Pose::IDENTITY,
         frame_b: Pose::IDENTITY,
         delta_center: Vec3::ZERO,
+        center_b: Vec3::ZERO,
     };
 }
 
@@ -209,12 +218,14 @@ impl Joint {
             crate::math::mul_quat(body_b.pose.rotation, self.local_frame_b.rotation),
         );
         sim.delta_center = body_b.center - body_a.center;
+        sim.center_b = body_b.center;
         let sim = self.sim;
         match &mut self.kind {
             JointKind::Spherical(joint) => joint.prepare(&sim, ctx),
             JointKind::Revolute(joint) => joint.prepare(&sim, ctx),
             JointKind::Weld(joint) => joint.prepare(&sim, ctx),
             JointKind::Distance(joint) => joint.prepare(&sim, ctx),
+            JointKind::Mouse(joint) => joint.prepare(&sim, ctx),
             JointKind::Filter => {}
         }
     }
@@ -227,6 +238,7 @@ impl Joint {
             JointKind::Revolute(joint) => joint.warm_start(&sim, states),
             JointKind::Weld(joint) => joint.warm_start(&sim, states),
             JointKind::Distance(joint) => joint.warm_start(&sim, states),
+            JointKind::Mouse(joint) => joint.warm_start(&sim, states),
             JointKind::Filter => {}
         }
     }
@@ -239,6 +251,7 @@ impl Joint {
             JointKind::Revolute(joint) => joint.solve(&sim, states, ctx, use_bias),
             JointKind::Weld(joint) => joint.solve(&sim, states, ctx, use_bias),
             JointKind::Distance(joint) => joint.solve(&sim, states, ctx, use_bias),
+            JointKind::Mouse(joint) => joint.solve(&sim, states, ctx),
             JointKind::Filter => {}
         }
     }

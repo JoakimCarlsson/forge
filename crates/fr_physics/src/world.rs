@@ -11,7 +11,7 @@ use crate::constants::{CONTACT_RECYCLE_DISTANCE, SPECULATIVE_DISTANCE};
 use crate::contact::{Contact, ContactId, ContactTag, geometry_rank};
 use crate::geometry::{Geometry, MassData};
 use crate::island::{Island, IslandId, IslandTag};
-use crate::joint::{Joint, JointDef, JointId, JointKind, JointTag};
+use crate::joint::{Joint, JointDef, JointId, JointKind, JointTag, MouseJoint};
 use crate::math::Pose;
 use crate::shape::{Filter, Material, Shape, ShapeDef, ShapeId, ShapeTag};
 use crate::slot::SlotMap;
@@ -245,6 +245,12 @@ impl World {
         };
         let joints = body.joints.clone();
         let shapes = body.shapes.clone();
+        let ignored = body.ignored.clone();
+        for other in ignored {
+            if let Some(other) = self.bodies.get_mut(other) {
+                other.ignored.retain(|&candidate| candidate != id);
+            }
+        }
         for joint in joints {
             self.destroy_joint(joint);
         }
@@ -697,6 +703,65 @@ impl World {
         self.joints.get(id).map(|j| (j.body_a, j.body_b))
     }
 
+    /// Grabs `body` at the world point `anchor` with a mouse joint that pulls it towards the
+    /// anchor, holding it against `ground`, a static body that is the other end of the joint.
+    /// The bodies keep colliding. Returns `None` when a body is stale or the same.
+    pub fn create_mouse_joint(
+        &mut self,
+        ground: BodyId,
+        body: BodyId,
+        anchor: Vec3,
+        mut joint: MouseJoint,
+    ) -> Option<JointId> {
+        let pose = self.body_pose(body)?;
+        joint.target = anchor;
+        let mut def = JointDef::new(
+            ground,
+            body,
+            Pose::IDENTITY,
+            Pose::from_position(pose.inv_transform_point(anchor)),
+            JointKind::Mouse(joint),
+        );
+        def.collide_connected = true;
+        self.create_joint(def)
+    }
+
+    /// Moves the target of a mouse joint and wakes the body it holds.
+    pub fn set_mouse_joint_target(&mut self, id: JointId, target: Vec3) {
+        let Some(joint) = self.joints.get_mut(id) else {
+            return;
+        };
+        let body = joint.body_b;
+        if let JointKind::Mouse(mouse) = &mut joint.kind {
+            mouse.target = target;
+            self.wake_body(body);
+        }
+    }
+
+    /// Makes two bodies never collide with each other, whatever their shapes' filters and
+    /// joints say, and destroys the contacts between them. Does nothing for the same body or a
+    /// stale handle.
+    pub fn disable_collision_between(&mut self, a: BodyId, b: BodyId) {
+        if a == b || !self.bodies.contains(a) || !self.bodies.contains(b) {
+            return;
+        }
+        for (body, other) in [(a, b), (b, a)] {
+            if let Some(body) = self.bodies.get_mut(body)
+                && !body.ignored.contains(&other)
+            {
+                body.ignored.push(other);
+            }
+        }
+        self.destroy_contacts_between(a, b);
+    }
+
+    /// Whether two bodies were made never to collide by [`World::disable_collision_between`].
+    pub fn is_collision_disabled(&self, a: BodyId, b: BodyId) -> bool {
+        self.bodies
+            .get(a)
+            .is_some_and(|body| body.ignored.contains(&b))
+    }
+
     /// Destroys the contacts between two bodies.
     fn destroy_contacts_between(&mut self, a: BodyId, b: BodyId) {
         let source = match self.bodies.get(a) {
@@ -721,13 +786,16 @@ impl World {
         }
     }
 
-    /// Whether two bodies may collide: at least one is dynamic and no joint between them
+    /// Whether two bodies may collide: at least one is dynamic, they were not made to ignore each other and no joint between them
     /// disables collision.
     pub(crate) fn should_bodies_collide(&self, a: BodyId, b: BodyId) -> bool {
         let (Some(body_a), Some(body_b)) = (self.bodies.get(a), self.bodies.get(b)) else {
             return false;
         };
         if !body_a.is_dynamic() && !body_b.is_dynamic() {
+            return false;
+        }
+        if body_a.ignored.contains(&b) {
             return false;
         }
         let (source, other) = if body_a.joints.len() < body_b.joints.len() {

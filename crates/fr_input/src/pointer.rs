@@ -13,6 +13,16 @@ pub enum PointerButton {
     Other(u16),
 }
 
+/// What the pointer does while a window has it.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum CursorMode {
+    /// The pointer is visible and moves freely.
+    #[default]
+    Normal,
+    /// The pointer is hidden and kept in the window, and motion is reported as relative deltas.
+    Captured,
+}
+
 /// How far a wheel or touchpad scrolled, in logical pixels.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct ScrollDelta {

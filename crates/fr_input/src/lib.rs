@@ -11,5 +11,5 @@ mod pointer;
 mod state;
 
 pub use keyboard::{Key, KeyEvent, Modifiers};
-pub use pointer::{PointerButton, ScrollDelta};
+pub use pointer::{CursorMode, PointerButton, ScrollDelta};
 pub use state::ButtonState;
