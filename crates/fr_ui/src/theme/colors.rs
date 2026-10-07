@@ -65,4 +65,10 @@ pub struct Colors {
     pub warning: Rgba,
     /// Something failed or is destructive.
     pub danger: Rgba,
+    /// The X axis: the tag and tint of anything along it.
+    pub axis_x: Rgba,
+    /// The Y axis.
+    pub axis_y: Rgba,
+    /// The Z axis.
+    pub axis_z: Rgba,
 }

@@ -44,6 +44,8 @@ pub enum Key {
     Home,
     /// The end key.
     End,
+    /// A function key, `Function(5)` being F5.
+    Function(u8),
     /// Any other key.
     Other,
 }

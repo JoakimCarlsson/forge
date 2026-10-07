@@ -17,27 +17,36 @@ use fr_mesh::{MeshData, MeshId};
 
 use crate::RenderError;
 use crate::atlas::GlyphAtlas;
+use crate::capture::{Capture, read_texture};
 use crate::draw::DrawList;
 use crate::forward::ForwardPass;
 use crate::pipeline::{GlyphInstance, InstanceBuffer, QuadInstance, Viewport, build_pipeline};
 use crate::resources::Resources;
 use crate::scene::Scene;
+use crate::targets::PixelRect;
 use crate::text::TextSystem;
 
 /// The multisample count the 3D pass uses where the surface supports it.
 const SAMPLES: u32 = 4;
 
-/// Owns the GPU device, queue and swapchain surface backing one window.
+/// The colour format an offscreen renderer draws into: 8 bits a channel and
+/// not sRGB, like the swapchain format the window path prefers.
+const OFFSCREEN_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
+
+/// Owns the GPU device and queue, and either the swapchain surface backing one
+/// window or the texture an offscreen renderer draws into.
 pub struct Renderer {
-    /// The surface presented to.
-    surface: wgpu::Surface<'static>,
+    /// The surface presented to, or none when rendering offscreen.
+    surface: Option<wgpu::Surface<'static>>,
+    /// The texture frames are drawn into when there is no surface.
+    offscreen: Option<wgpu::Texture>,
     /// The device resources are created on.
     device: wgpu::Device,
     /// The queue work is submitted to.
     queue: wgpu::Queue,
     /// The present modes the surface supports.
     present_modes: Vec<wgpu::PresentMode>,
-    /// The swapchain configuration most recently requested.
+    /// The swapchain configuration most recently requested; offscreen only its size and format are used.
     config: wgpu::SurfaceConfiguration,
     /// The physical size the swapchain was last configured to present.
     configured_size: (u32, u32),
@@ -83,21 +92,11 @@ impl Renderer {
     where
         W: HasWindowHandle + HasDisplayHandle + Send + Sync + 'static,
     {
-        let instance =
-            wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle().with_env());
+        let instance = new_instance();
         let surface = instance
             .create_surface(Arc::new(window))
             .map_err(RenderError::Surface)?;
-        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-            compatible_surface: Some(&surface),
-            ..Default::default()
-        }))
-        .map_err(RenderError::Adapter)?;
-        let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
-            label: Some("forge device"),
-            ..Default::default()
-        }))
-        .map_err(RenderError::Device)?;
+        let (adapter, device, queue) = request_device(&instance, Some(&surface))?;
 
         let capabilities = surface.get_capabilities(&adapter);
         let format = capabilities
@@ -124,16 +123,62 @@ impl Renderer {
             desired_maximum_frame_latency: 2,
         };
         surface.configure(&device, &config);
+        let samples = sample_count(&adapter, format);
+        Self::assemble(
+            device,
+            queue,
+            Some(surface),
+            capabilities.present_modes,
+            config,
+            samples,
+            scale,
+        )
+    }
 
-        let samples = if adapter
-            .get_texture_format_features(format)
-            .flags
-            .sample_count_supported(SAMPLES)
-        {
-            SAMPLES
-        } else {
-            1
+    /// Creates a renderer with no window: frames are drawn into a texture of
+    /// `width` by `height` physical pixels at `scale` physical pixels per
+    /// logical pixel, and read back with [`Self::capture`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RenderError`] when no adapter or device can be created.
+    pub fn new_offscreen(width: u32, height: u32, scale: f32) -> Result<Self, RenderError> {
+        let instance = new_instance();
+        let (adapter, device, queue) = request_device(&instance, None)?;
+        let format = OFFSCREEN_FORMAT;
+        let config = wgpu::SurfaceConfiguration {
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+            format,
+            width: width.max(1),
+            height: height.max(1),
+            present_mode: wgpu::PresentMode::Fifo,
+            alpha_mode: wgpu::CompositeAlphaMode::Auto,
+            color_space: wgpu::SurfaceColorSpace::Srgb,
+            view_formats: vec![],
+            desired_maximum_frame_latency: 2,
         };
+        let samples = sample_count(&adapter, format);
+        let mut renderer = Self::assemble(device, queue, None, Vec::new(), config, samples, scale)?;
+        renderer.recreate_offscreen();
+        Ok(renderer)
+    }
+
+    /// Builds everything that does not depend on whether frames go to a
+    /// surface or a texture, around the device and the target's `config`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RenderError::InvalidAsset`] when the default material cannot be created.
+    fn assemble(
+        device: wgpu::Device,
+        queue: wgpu::Queue,
+        surface: Option<wgpu::Surface<'static>>,
+        present_modes: Vec<wgpu::PresentMode>,
+        config: wgpu::SurfaceConfiguration,
+        samples: u32,
+        scale: f32,
+    ) -> Result<Self, RenderError> {
+        let format = config.format;
         let mut resources = Resources::new(&device, &queue);
         let default_material = resources.create_material(&device, &MaterialData::default())?;
         let forward = ForwardPass::new(
@@ -193,8 +238,9 @@ impl Renderer {
         );
 
         Ok(Self {
-            present_modes: capabilities.present_modes,
+            present_modes,
             surface,
+            offscreen: None,
             device,
             queue,
             configured_size: (config.width, config.height),
@@ -280,7 +326,8 @@ impl Renderer {
     ///
     /// Resize events can arrive faster than frames are presented, so the
     /// swapchain is only reconfigured when a frame needs the final size.
-    /// Zero-sized requests are ignored.
+    /// An offscreen renderer recreates its target texture at once, dropping
+    /// the last frame. Zero-sized requests are ignored.
     pub fn resize(&mut self, width: u32, height: u32, scale: f32) {
         self.scale = scale.max(f32::EPSILON);
         if width == 0 || height == 0 {
@@ -288,6 +335,9 @@ impl Renderer {
         }
         self.config.width = width;
         self.config.height = height;
+        if self.surface.is_none() {
+            self.recreate_offscreen();
+        }
     }
 
     /// Chooses whether presenting waits for the display's refresh.
@@ -312,28 +362,110 @@ impl Renderer {
 
     /// Recreates the swapchain at the latest requested physical size.
     fn configure_surface(&mut self) {
-        self.surface.configure(&self.device, &self.config);
+        if let Some(surface) = &self.surface {
+            surface.configure(&self.device, &self.config);
+        }
         self.configured_size = (self.config.width, self.config.height);
+    }
+
+    /// Recreates the offscreen target texture at the configured size.
+    fn recreate_offscreen(&mut self) {
+        self.offscreen = Some(self.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("offscreen target"),
+            size: wgpu::Extent3d {
+                width: self.config.width,
+                height: self.config.height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: self.config.format,
+            usage: self.config.usage,
+            view_formats: &[],
+        }));
+        self.configured_size = (self.config.width, self.config.height);
+    }
+
+    /// Reads back the last frame an offscreen renderer drew.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RenderError::NotOffscreen`] when the renderer presents to a
+    /// window, and [`RenderError::Readback`] when the device cannot hand the
+    /// pixels over.
+    pub fn capture(&mut self) -> Result<Capture, RenderError> {
+        let texture = match (&self.surface, &self.offscreen) {
+            (None, Some(texture)) => texture,
+            _ => return Err(RenderError::NotOffscreen),
+        };
+        read_texture(
+            &self.device,
+            &self.queue,
+            texture,
+            self.config.width,
+            self.config.height,
+        )
+    }
+
+    /// Gets the view the next frame is drawn into, and the swapchain frame to
+    /// present afterwards when there is one.
+    ///
+    /// A swapchain that is outdated or lost is reconfigured and none is
+    /// returned; one that is timed out or hidden returns none as well.
+    fn acquire(&mut self) -> Option<(wgpu::TextureView, Option<wgpu::SurfaceTexture>)> {
+        if self.configured_size != (self.config.width, self.config.height) {
+            self.configure_surface();
+        }
+        let Some(surface) = &self.surface else {
+            let view = self
+                .offscreen
+                .as_ref()?
+                .create_view(&wgpu::TextureViewDescriptor::default());
+            return Some((view, None));
+        };
+        let frame = match surface.get_current_texture() {
+            wgpu::CurrentSurfaceTexture::Success(frame)
+            | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => frame,
+            wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost => {
+                self.configure_surface();
+                return None;
+            }
+            _ => return None,
+        };
+        let view = frame
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+        Some((view, Some(frame)))
     }
 
     /// Draws one frame and presents it: the 3D `scene`, if it has any
     /// instances, over `clear`, then `list` on top, in a single submission.
     ///
     /// A swapchain that is outdated or lost is reconfigured and the frame
-    /// skipped; one that is timed out or hidden skips the frame as well.
+    /// skipped; one that is timed out or hidden skips the frame as well. An
+    /// offscreen renderer draws into its texture and presents nothing.
     pub fn render(&mut self, list: &DrawList, scene: Option<&Scene>, clear: Rgba) {
+        self.render_in(list, scene, None, clear);
+    }
+
+    /// Draws one frame like [`Self::render`], with the 3D `scene` confined to
+    /// `scene_rect`, a rectangle in logical pixels, when one is given.
+    ///
+    /// The camera's aspect ratio and the shadow fit follow the rectangle, which
+    /// is clamped to the target; the target is still cleared to `clear`
+    /// everywhere and the UI is drawn over all of it. A rectangle with nothing
+    /// inside the target draws no 3D.
+    pub fn render_in(
+        &mut self,
+        list: &DrawList,
+        scene: Option<&Scene>,
+        scene_rect: Option<Rect>,
+        clear: Rgba,
+    ) {
         self.text.end_frame();
-        if self.configured_size != (self.config.width, self.config.height) {
-            self.configure_surface();
-        }
-        let frame = match self.surface.get_current_texture() {
-            wgpu::CurrentSurfaceTexture::Success(frame)
-            | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => frame,
-            wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost => {
-                self.configure_surface();
-                return;
-            }
-            _ => return,
+        let Some((view, frame)) = self.acquire() else {
+            return;
         };
 
         self.queue.write_buffer(
@@ -345,14 +477,22 @@ impl Renderer {
             }),
         );
 
-        let scene = scene.filter(|scene| !scene.instances.is_empty());
-        if let Some(scene) = scene {
+        let target = (self.config.width, self.config.height);
+        let viewport = match scene_rect {
+            Some(rect) => PixelRect::clamped(rect, self.scale, target),
+            None => Some(PixelRect::full(target)),
+        };
+        let scene = scene
+            .filter(|scene| !scene.instances.is_empty())
+            .zip(viewport);
+        if let Some((scene, viewport)) = scene {
             self.forward.prepare(
                 &self.device,
                 &self.queue,
                 &self.resources,
                 scene,
-                (self.config.width, self.config.height),
+                target,
+                viewport,
             );
         }
 
@@ -370,9 +510,6 @@ impl Renderer {
             bytemuck::cast_slice(&self.glyphs),
         );
 
-        let view = frame
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
         let mut encoder = self
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -423,7 +560,9 @@ impl Renderer {
             }
         }
         self.queue.submit([encoder.finish()]);
-        self.queue.present(frame);
+        if let Some(frame) = frame {
+            self.queue.present(frame);
+        }
     }
 
     /// Converts the list's quads to physical-pixel instances.
@@ -440,7 +579,7 @@ impl Renderer {
                 background: quad.background.to_array(),
                 border_color: quad.border_color.to_array(),
                 radii: quad.corner_radii.map(|radius| radius * scale),
-                border: [quad.border_width * scale, 0.0],
+                border: [quad.border_width * scale, quad.rotation],
                 clip: physical_clip(*clip, scale),
             });
         }
@@ -545,4 +684,45 @@ fn physical_clip(clip: Rect, scale: f32) -> [f32; 4] {
         clip.right() * scale,
         clip.bottom() * scale,
     ]
+}
+
+/// Creates the wgpu instance, honouring the environment such as `WGPU_VALIDATION`.
+fn new_instance() -> wgpu::Instance {
+    wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle().with_env())
+}
+
+/// Requests an adapter, compatible with `surface` when there is one, and a device on it.
+///
+/// # Errors
+///
+/// Returns [`RenderError::Adapter`] or [`RenderError::Device`] when either is refused.
+fn request_device(
+    instance: &wgpu::Instance,
+    surface: Option<&wgpu::Surface<'_>>,
+) -> Result<(wgpu::Adapter, wgpu::Device, wgpu::Queue), RenderError> {
+    let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+        compatible_surface: surface,
+        ..Default::default()
+    }))
+    .map_err(RenderError::Adapter)?;
+    let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
+        label: Some("forge device"),
+        ..Default::default()
+    }))
+    .map_err(RenderError::Device)?;
+    Ok((adapter, device, queue))
+}
+
+/// The multisample count the 3D pass uses for `format` on `adapter`: [`SAMPLES`]
+/// where supported, else one.
+fn sample_count(adapter: &wgpu::Adapter, format: wgpu::TextureFormat) -> u32 {
+    if adapter
+        .get_texture_format_features(format)
+        .flags
+        .sample_count_supported(SAMPLES)
+    {
+        SAMPLES
+    } else {
+        1
+    }
 }

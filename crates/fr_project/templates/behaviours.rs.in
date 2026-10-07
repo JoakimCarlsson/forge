@@ -1,0 +1,8 @@
+//! The behaviours of the game. Each module registers one component type and
+//! `register_all` lists every module, so no behaviour registers itself as a
+//! side effect of being linked.
+
+use fr_engine::prelude::ComponentRegistry;
+
+/// Registers every behaviour of the game.
+pub fn register_all(_registry: &mut ComponentRegistry) {}

@@ -13,6 +13,10 @@ pub enum RenderError {
     Device(wgpu::RequestDeviceError),
     /// The surface offers no configuration the adapter supports.
     Unsupported,
+    /// A frame was requested from a renderer that presents to a window.
+    NotOffscreen,
+    /// Reading a frame back from the device failed.
+    Readback(String),
     /// An asset handed to the renderer cannot be uploaded.
     InvalidAsset(String),
 }
@@ -25,6 +29,8 @@ impl fmt::Display for RenderError {
             Self::Adapter(error) => write!(f, "no suitable adapter: {error}"),
             Self::Device(error) => write!(f, "device creation failed: {error}"),
             Self::Unsupported => write!(f, "the surface supports no usable configuration"),
+            Self::NotOffscreen => write!(f, "only an offscreen renderer can capture a frame"),
+            Self::Readback(reason) => write!(f, "reading the frame back failed: {reason}"),
             Self::InvalidAsset(reason) => write!(f, "invalid asset: {reason}"),
         }
     }
@@ -37,7 +43,9 @@ impl std::error::Error for RenderError {
             Self::Surface(error) => Some(error),
             Self::Adapter(error) => Some(error),
             Self::Device(error) => Some(error),
-            Self::Unsupported | Self::InvalidAsset(_) => None,
+            Self::Unsupported | Self::NotOffscreen | Self::Readback(_) | Self::InvalidAsset(_) => {
+                None
+            }
         }
     }
 }

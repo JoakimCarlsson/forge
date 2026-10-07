@@ -19,3 +19,4 @@ fr_image.workspace = true
 fr_material.workspace = true
 fr_skeleton.workspace = true
 gltf = { version = "1.4.1", features = ["KHR_lights_punctual", "KHR_materials_emissive_strength"] }
+fr_document.workspace = true

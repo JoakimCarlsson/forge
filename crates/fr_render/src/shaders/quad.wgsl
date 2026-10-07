@@ -51,7 +51,14 @@ fn rounded_box(point: vec2<f32>, half_size: vec2<f32>, radius: f32) -> f32 {
 @vertex
 fn vertex(@builtin(vertex_index) index: u32, instance: Instance) -> Fragment {
     let corner = unit_corner(index);
-    let point = instance.origin + corner * instance.size;
+    let local = (corner - vec2<f32>(0.5)) * instance.size;
+    let sine = sin(instance.border.y);
+    let cosine = cos(instance.border.y);
+    let rotated = vec2<f32>(
+        local.x * cosine - local.y * sine,
+        local.x * sine + local.y * cosine,
+    );
+    let point = instance.origin + instance.size * 0.5 + rotated;
 
     return Fragment(
         vec4<f32>(
@@ -60,7 +67,7 @@ fn vertex(@builtin(vertex_index) index: u32, instance: Instance) -> Fragment {
             0.0,
             1.0,
         ),
-        (corner - vec2<f32>(0.5)) * instance.size,
+        local,
         instance.size * 0.5,
         instance.background,
         instance.border_color,

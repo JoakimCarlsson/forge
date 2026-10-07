@@ -134,12 +134,16 @@ impl<H: WindowHandler> ApplicationHandler for Host<H> {
         match event {
             WindowEvent::CloseRequested => {
                 self.handler.close_requested();
-                event_loop.exit();
+                if !self.handler.keeps_open() {
+                    event_loop.exit();
+                }
             }
             WindowEvent::Resized(size) => self.handler.resized(size.width, size.height),
             WindowEvent::RedrawRequested => {
                 self.handler.redraw();
-                if let Some(window) = &self.window {
+                if self.handler.wants_exit() {
+                    event_loop.exit();
+                } else if let Some(window) = &self.window {
                     window.request_redraw();
                 }
             }

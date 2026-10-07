@@ -1,0 +1,51 @@
+//! The game's entry point.
+
+mod behaviours;
+
+use std::process::ExitCode;
+
+use fr_engine::prelude::*;
+use fr_engine::{export_schema_if_requested, parse_run_options, run};
+
+/// The title of the game's window.
+const WINDOW_TITLE: &str = "Game";
+
+/// The game: it loads the startup scene and leaves what happens in it to the
+/// behaviours.
+struct Game;
+
+impl App for Game {
+    type Message = ();
+
+    /// Called once after the startup scene is loaded.
+    fn start(&mut self, _context: &mut AppContext<'_>) -> EngineResult {
+        Ok(())
+    }
+
+    /// Called once per rendered frame, before the behaviours' update.
+    fn update(&mut self, _context: &mut AppContext<'_>, _frame: &FrameInfo) -> EngineResult {
+        Ok(())
+    }
+}
+
+/// Registers the game's behaviours, writes the component schema and exits when
+/// the command line asks for it with `--forge-export-schema`, and otherwise
+/// runs the game.
+fn main() -> ExitCode {
+    let mut registry = ComponentRegistry::new();
+    behaviours::register_all(&mut registry);
+    let arguments: Vec<String> = std::env::args_os()
+        .map(|argument| argument.to_string_lossy().into_owned())
+        .collect();
+    match export_schema_if_requested(&registry, &arguments) {
+        Ok(true) => return ExitCode::SUCCESS,
+        Ok(false) => {}
+        Err(problem) => {
+            eprintln!("{problem}");
+            return ExitCode::FAILURE;
+        }
+    }
+    let mut options = parse_run_options(std::env::args_os());
+    options.window.title = WINDOW_TITLE.to_owned();
+    run(&mut Game, registry, &options)
+}

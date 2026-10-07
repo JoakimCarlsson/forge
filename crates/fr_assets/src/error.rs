@@ -4,6 +4,8 @@ use std::error::Error;
 use std::fmt;
 use std::path::PathBuf;
 
+use fr_document::{DocumentError, Guid};
+
 /// A failure to read or interpret an asset file.
 #[derive(Debug)]
 pub enum AssetError {
@@ -20,6 +22,20 @@ pub enum AssetError {
         path: PathBuf,
         /// What is wrong with it.
         reason: String,
+    },
+    /// A scene, prefab or sidecar could not be read or understood.
+    Document(DocumentError),
+    /// No asset of the library has the identity.
+    Missing {
+        /// The identity that was asked for.
+        id: Guid,
+    },
+    /// The asset exists but is not of the kind that was asked for.
+    WrongKind {
+        /// The path of the asset, relative to the asset root.
+        path: String,
+        /// The kind that was asked for.
+        expected: &'static str,
     },
 }
 
@@ -54,6 +70,9 @@ impl fmt::Display for AssetError {
             Self::Malformed { path, reason } => {
                 write!(f, "cannot use {}: {reason}", path.display())
             }
+            Self::Document(error) => write!(f, "{error}"),
+            Self::Missing { id } => write!(f, "no asset has the identity {}", id.to_text()),
+            Self::WrongKind { path, expected } => write!(f, "{path} is not a {expected}"),
         }
     }
 }
@@ -63,7 +82,15 @@ impl Error for AssetError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             Self::Import { source, .. } => Some(source.as_ref()),
-            Self::Malformed { .. } => None,
+            Self::Document(error) => Some(error),
+            Self::Malformed { .. } | Self::Missing { .. } | Self::WrongKind { .. } => None,
         }
+    }
+}
+
+impl From<DocumentError> for AssetError {
+    /// Wraps a failure of the authored data.
+    fn from(error: DocumentError) -> Self {
+        Self::Document(error)
     }
 }

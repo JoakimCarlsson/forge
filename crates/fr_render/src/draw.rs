@@ -20,6 +20,8 @@ pub struct Quad {
     pub border_width: f32,
     /// Colour of the border.
     pub border_color: Rgba,
+    /// Clockwise rotation around the centre of `bounds`, in radians.
+    pub rotation: f32,
 }
 
 impl Quad {
@@ -31,7 +33,34 @@ impl Quad {
             corner_radii: [0.0; 4],
             border_width: 0.0,
             border_color: Rgba::TRANSPARENT,
+            rotation: 0.0,
         }
+    }
+
+    /// Returns this quad turned clockwise by `radians` around the centre of its bounds.
+    pub fn rotated(mut self, radians: f32) -> Self {
+        self.rotation = radians;
+        self
+    }
+
+    /// The smallest upright rectangle that holds the quad once rotated.
+    pub fn rotated_bounds(&self) -> Rect {
+        if self.rotation == 0.0 {
+            return self.bounds;
+        }
+        let (sine, cosine) = self.rotation.sin_cos();
+        let half_width =
+            (self.bounds.size.width * cosine.abs() + self.bounds.size.height * sine.abs()) * 0.5;
+        let half_height =
+            (self.bounds.size.width * sine.abs() + self.bounds.size.height * cosine.abs()) * 0.5;
+        let center = Point::new(
+            self.bounds.left() + self.bounds.size.width * 0.5,
+            self.bounds.top() + self.bounds.size.height * 0.5,
+        );
+        Rect::new(
+            Point::new(center.x - half_width, center.y - half_height),
+            Size::new(half_width * 2.0, half_height * 2.0),
+        )
     }
 
     /// Returns this quad with every corner rounded by `radius`.
@@ -153,11 +182,32 @@ impl DrawList {
 
     /// Adds a quad, skipping it when it would draw nothing.
     pub fn quad(&mut self, quad: Quad) {
-        if quad.is_invisible() || !self.is_visible(quad.bounds) {
+        if quad.is_invisible() || !self.is_visible(quad.rotated_bounds()) {
             return;
         }
         let clip = self.clip();
         self.quads.push((quad, clip));
+    }
+
+    /// Adds a straight line from `from` to `to`, `width` thick with rounded
+    /// ends, in `color`, confined to the current clip.
+    ///
+    /// It is a rounded quad as long as the line plus its caps, turned to the
+    /// line's direction; a zero-length line is a dot.
+    pub fn line(&mut self, from: Point, to: Point, width: f32, color: Rgba) {
+        let width = width.max(0.0);
+        let (dx, dy) = (to.x - from.x, to.y - from.y);
+        let length = dx.hypot(dy) + width;
+        let center = Point::new((from.x + to.x) * 0.5, (from.y + to.y) * 0.5);
+        let bounds = Rect::new(
+            Point::new(center.x - length * 0.5, center.y - width * 0.5),
+            Size::new(length, width),
+        );
+        self.quad(
+            Quad::filled(bounds, color)
+                .corner_radius(width * 0.5)
+                .rotated(dy.atan2(dx)),
+        );
     }
 
     /// Adds a shaped run at `origin` in `color`.

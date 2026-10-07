@@ -101,6 +101,26 @@ pub enum IconName {
     Sun,
     /// Lines of text.
     Text,
+    /// A camera, for a view onto the scene.
+    Camera,
+    /// A solid shape.
+    Cube,
+    /// A light bulb, for a light source.
+    Light,
+    /// Translate: arrows along every axis.
+    Move,
+    /// Start running.
+    Play,
+    /// Turn around a point.
+    Rotate,
+    /// Grow or shrink.
+    Scale,
+    /// A clapperboard, for a scene.
+    Scene,
+    /// Stop running.
+    Stop,
+    /// Delete what the control is on.
+    Trash,
     /// Put back as it was.
     Undo,
     /// Something to look at.
@@ -148,6 +168,16 @@ impl IconName {
             Self::Settings => Svg::new("settings", include_icon!("settings")),
             Self::Sun => Svg::new("sun", include_icon!("sun")),
             Self::Text => Svg::new("text", include_icon!("text")),
+            Self::Camera => Svg::new("camera", include_icon!("camera")),
+            Self::Cube => Svg::new("cube", include_icon!("cube")),
+            Self::Light => Svg::new("light", include_icon!("light")),
+            Self::Move => Svg::new("move", include_icon!("move")),
+            Self::Play => Svg::new("play", include_icon!("play")),
+            Self::Rotate => Svg::new("rotate", include_icon!("rotate")),
+            Self::Scale => Svg::new("scale", include_icon!("scale")),
+            Self::Scene => Svg::new("scene", include_icon!("scene")),
+            Self::Stop => Svg::new("stop", include_icon!("stop")),
+            Self::Trash => Svg::new("trash", include_icon!("trash")),
             Self::Undo => Svg::new("undo", include_icon!("undo")),
             Self::Warning => Svg::new("warning", include_icon!("warning")),
         }

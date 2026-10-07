@@ -28,7 +28,7 @@ pub(crate) struct QuadInstance {
     pub(crate) border_color: [f32; 4],
     /// Corner radii, clockwise from the top-left corner.
     pub(crate) radii: [f32; 4],
-    /// Border width, and padding to the next attribute.
+    /// Border width, then the clockwise rotation around the centre in radians.
     pub(crate) border: [f32; 2],
     /// Clip rectangle as left, top, right, bottom.
     pub(crate) clip: [f32; 4],

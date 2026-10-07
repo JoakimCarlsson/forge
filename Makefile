@@ -1,16 +1,18 @@
-EXAMPLE ?= demo
 ARGS ?=
 
-.PHONY: run debug build fmt lint test clean
+.PHONY: run debug build env fmt lint test clean
 
 run:
-	cargo run --release -p fr_engine --example $(EXAMPLE) -- $(ARGS)
+	cargo run --release -p fr_editor -- $(ARGS)
 
 debug:
-	cargo run -p fr_engine --example $(EXAMPLE) -- $(ARGS)
+	cargo run -p fr_editor -- $(ARGS)
 
 build:
 	cargo build --workspace --all-targets
+
+env:
+	cargo install --path crates/fr_editor --locked
 
 fmt:
 	cargo fmt --all

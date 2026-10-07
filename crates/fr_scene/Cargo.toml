@@ -1,0 +1,25 @@
+[package]
+name = "fr_scene"
+description = "The scene of the forge engine: the entity hierarchy over component records, prefab instancing, transform resolution, the structural boundary and the Stage that realizes components through adapters."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+fr_assets.workspace = true
+fr_camera.workspace = true
+fr_document.workspace = true
+fr_image.workspace = true
+fr_light.workspace = true
+fr_material.workspace = true
+fr_math.workspace = true
+fr_mesh.workspace = true
+fr_physics.workspace = true
+fr_render.workspace = true
+fr_skeleton.workspace = true
+fr_transform.workspace = true
+
+[lints]
+workspace = true

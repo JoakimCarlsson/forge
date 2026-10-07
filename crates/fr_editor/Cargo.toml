@@ -1,0 +1,34 @@
+[package]
+name = "fr_editor"
+description = "The forge editor: a window, its own loop, the dock of panels and the live preview of the scene being authored."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+default-run = "forge_editor"
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "forge_editor"
+path = "src/main.rs"
+
+[dependencies]
+fr_authoring.workspace = true
+fr_ui.workspace = true
+fr_render.workspace = true
+fr_scene.workspace = true
+fr_assets.workspace = true
+fr_document.workspace = true
+fr_project.workspace = true
+fr_window.workspace = true
+fr_math.workspace = true
+fr_camera.workspace = true
+fr_color.workspace = true
+fr_input.workspace = true
+fr_transform.workspace = true
+fr_light.workspace = true
+dirs = "7.0.0"
+png = "0.18.1"

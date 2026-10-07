@@ -1,0 +1,16 @@
+[package]
+name = "fr_project"
+description = "Projects of the forge engine: project.forge, the asset listing, scaffolding of a new game from templates and cargo build steps."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+fr_document.workspace = true
+fr_math.workspace = true
+fr_transform.workspace = true
+
+[lints]
+workspace = true

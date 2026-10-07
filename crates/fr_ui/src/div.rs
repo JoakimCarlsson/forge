@@ -1,10 +1,16 @@
 //! The one container: a flex box that stacks children along an axis.
 
+use std::sync::Arc;
+
 use fr_color::Rgba;
-use fr_math::{Rect, Size};
+use fr_input::ScrollDelta;
+use fr_math::{Point, Rect, Size};
 use fr_render::Quad;
 
+use crate::drag::DragEvent;
 use crate::element::{Element, Interaction, IntoElement, LayoutContext, PaintContext};
+use crate::rects::Rects;
+use crate::region::RegionAction;
 use crate::style::{Align, Axis, Justify, Length, Side, Style, Styled};
 
 /// A container that measures its children, stacks them and paints a background.
@@ -13,8 +19,12 @@ pub struct Div<M> {
     style: Style,
     /// The children, in stacking order.
     children: Vec<Box<dyn Element<M>>>,
-    /// What a click on this container sends, when it answers to one at all.
-    on_click: Option<M>,
+    /// What this container does with the pointer, when it answers to it at all.
+    action: RegionAction<M>,
+    /// The tooltip shown once the pointer rests on this container.
+    tooltip: Option<String>,
+    /// Where to leave this container's bounds, and under which key.
+    record: Option<(Rects, String)>,
     /// Whether the pointer is over this container for the app's purposes even
     /// when it has no click message, as a panel over a scene is.
     blocks_pointer: bool,
@@ -67,7 +77,9 @@ pub fn div<M>() -> Div<M> {
     Div {
         style: Style::default(),
         children: Vec::new(),
-        on_click: None,
+        action: RegionAction::inert(),
+        tooltip: None,
+        record: None,
         blocks_pointer: false,
         measured: None,
     }
@@ -103,7 +115,51 @@ impl<M> Div<M> {
 
     /// Makes this container answer to a click by sending `message`.
     pub fn on_click(mut self, message: M) -> Self {
-        self.on_click = Some(message);
+        self.action.click = Some(message);
+        self
+    }
+
+    /// Makes this container answer to a second quick click by sending `message`.
+    pub fn on_double_click(mut self, message: M) -> Self {
+        self.action.double_click = Some(message);
+        self
+    }
+
+    /// Makes this container send `message` when the secondary button goes down on it.
+    pub fn on_secondary_click(mut self, message: M) -> Self {
+        self.action.secondary = Some(message);
+        self
+    }
+
+    /// Makes this container send the message `handler` builds from where the
+    /// primary button went down on it.
+    pub fn on_press(mut self, handler: impl Fn(Point) -> M + 'static) -> Self {
+        self.action.press = Some(Arc::new(handler));
+        self
+    }
+
+    /// Makes this container capture drags that start on it, sending the message
+    /// `handler` builds from each event.
+    pub fn on_drag(mut self, handler: impl Fn(DragEvent) -> M + 'static) -> Self {
+        self.action.drag = Some(Arc::new(handler));
+        self
+    }
+
+    /// Makes this container turn the wheel over it into the message `handler` builds.
+    pub fn on_scroll(mut self, handler: impl Fn(ScrollDelta) -> M + 'static) -> Self {
+        self.action.scroll = Some(Arc::new(handler));
+        self
+    }
+
+    /// Shows `text` once the pointer has rested on this container.
+    pub fn tooltip(mut self, text: impl Into<String>) -> Self {
+        self.tooltip = Some(text.into());
+        self
+    }
+
+    /// Leaves this container's bounds in `rects` under `key` as it paints.
+    pub fn recorded(mut self, rects: &Rects, key: impl Into<String>) -> Self {
+        self.record = Some((rects.clone(), key.into()));
         self
     }
 
@@ -323,11 +379,21 @@ impl<M: Clone> Element<M> for Div<M> {
     /// was measured, and measured again only when the bounds it was given
     /// could change their answer.
     fn paint(&mut self, bounds: Rect, cx: &mut PaintContext<'_, '_, M>) {
-        let interaction = match self.on_click.clone() {
-            Some(message) => cx.interactive(bounds, message),
-            None if self.blocks_pointer => cx.clickable(bounds, None),
-            None => Interaction::default(),
+        if let Some((rects, key)) = &self.record {
+            rects.set(key.clone(), bounds);
+        }
+        let interaction = if self.action.is_active() {
+            cx.region(bounds, self.action.clone())
+        } else if self.blocks_pointer {
+            cx.block(bounds)
+        } else {
+            Interaction::default()
         };
+        if let Some(text) = &self.tooltip
+            && interaction.hovered
+        {
+            cx.tooltip(bounds, text.clone());
+        }
 
         cx.quad(
             Quad::filled(bounds, self.background(interaction))

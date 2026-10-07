@@ -22,12 +22,16 @@ fr_material = { version = "0.1.0", path = "crates/fr_material" }
 fr_light = { version = "0.1.0", path = "crates/fr_light" }
 fr_camera = { version = "0.1.0", path = "crates/fr_camera" }
 fr_skeleton = { version = "0.1.0", path = "crates/fr_skeleton" }
+fr_document = { version = "0.1.0", path = "crates/fr_document" }
 fr_assets = { version = "0.1.0", path = "crates/fr_assets" }
+fr_project = { version = "0.1.0", path = "crates/fr_project" }
 fr_physics = { version = "0.1.0", path = "crates/fr_physics" }
 fr_window = { version = "0.1.0", path = "crates/fr_window" }
 fr_render = { version = "0.1.0", path = "crates/fr_render" }
 fr_ui = { version = "0.1.0", path = "crates/fr_ui" }
+fr_scene = { version = "0.1.0", path = "crates/fr_scene" }
 fr_engine = { version = "0.1.0", path = "crates/fr_engine" }
+fr_authoring = { version = "0.1.0", path = "crates/fr_authoring" }
 
 [workspace.lints.rust]
 missing_docs = "warn"

@@ -13,7 +13,7 @@ use fr_mesh::MeshId;
 use crate::resources::Resources;
 use crate::scene::Scene;
 use crate::shadows::{ShadowMaps, plan_shadows};
-use crate::targets::{DEPTH_FORMAT, SceneTargets};
+use crate::targets::{DEPTH_FORMAT, PixelRect, SceneTargets};
 use crate::uniforms::{CameraUniform, LightSet, LightsUniform, ObjectData, Vertex};
 
 /// The mesh shader: the common, output, PBR, shadow, light and mesh parts
@@ -71,6 +71,8 @@ pub(crate) struct ForwardPass {
     targets: SceneTargets,
     /// The colour format rendered to.
     format: wgpu::TextureFormat,
+    /// The part of the target the prepared scene is drawn into.
+    viewport: PixelRect,
     /// The camera uniform.
     camera: wgpu::Buffer,
     /// The lights uniform.
@@ -135,6 +137,7 @@ impl ForwardPass {
             samples,
             targets: SceneTargets::new(device, format, size, samples),
             format,
+            viewport: PixelRect::full(size),
             camera,
             lights,
             objects,
@@ -151,7 +154,7 @@ impl ForwardPass {
     }
 
     /// Uploads `scene`'s camera, lights and objects and plans the draw calls
-    /// for a target of `size` physical pixels.
+    /// for a target of `size` physical pixels, drawn into `viewport` of it.
     pub(crate) fn prepare(
         &mut self,
         device: &wgpu::Device,
@@ -159,11 +162,13 @@ impl ForwardPass {
         resources: &Resources,
         scene: &Scene,
         size: (u32, u32),
+        viewport: PixelRect,
     ) {
         if !self.targets.matches(size) {
             self.targets = SceneTargets::new(device, self.format, size, self.samples);
         }
-        let aspect = size.0.max(1) as f32 / size.1.max(1) as f32;
+        self.viewport = viewport;
+        let aspect = viewport.aspect();
         queue.write_buffer(
             &self.camera,
             0,
@@ -301,6 +306,20 @@ impl ForwardPass {
             }),
             ..Default::default()
         });
+        pass.set_viewport(
+            self.viewport.x as f32,
+            self.viewport.y as f32,
+            self.viewport.width as f32,
+            self.viewport.height as f32,
+            0.0,
+            1.0,
+        );
+        pass.set_scissor_rect(
+            self.viewport.x,
+            self.viewport.y,
+            self.viewport.width,
+            self.viewport.height,
+        );
         pass.set_bind_group(0, &self.frame_group, &[]);
         let mut bound_variant = None;
         let mut bound_material = None;

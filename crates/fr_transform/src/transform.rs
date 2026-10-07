@@ -1,6 +1,6 @@
 //! Translation, rotation and scale of an object in space.
 
-use fr_math::{Mat4, Quat, Vec3};
+use fr_math::{Mat3, Mat4, Quat, Vec3};
 
 /// A translation, rotation and non-uniform scale, applied in scale, rotate,
 /// translate order.
@@ -62,6 +62,23 @@ impl Transform {
     pub const fn with_scale(mut self, scale: Vec3) -> Self {
         self.scale = scale;
         self
+    }
+
+    /// A transform at `eye` turned so that its forward axis, negative Z, points at `target`
+    /// with `up` as the direction that is up. A target at the eye or along `up` keeps the
+    /// identity rotation.
+    pub fn looking_at(eye: Vec3, target: Vec3, up: Vec3) -> Self {
+        let forward = (target - eye).normalize_or_zero();
+        let right = forward.cross(up).normalize_or_zero();
+        if right == Vec3::ZERO {
+            return Self::from_translation(eye);
+        }
+        let above = right.cross(forward);
+        Self {
+            translation: eye,
+            rotation: Quat::from_mat3(&Mat3::from_cols(right, above, -forward)),
+            scale: Vec3::ONE,
+        }
     }
 
     /// Splits an affine `matrix` back into translation, rotation and scale.

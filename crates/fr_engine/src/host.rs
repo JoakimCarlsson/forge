@@ -1,60 +1,39 @@
-//! Glue between the app, the window and the renderer.
+//! The frame loop's host: glue between the application, the simulation, the
+//! window, the renderer and the UI. The order of a frame is written here once.
 
-use std::fmt;
-
+use fr_color::Rgba;
 use fr_input::{ButtonState, KeyEvent, PointerButton, ScrollDelta};
 use fr_math::{Point, Size};
-use fr_render::{DrawList, RenderError, Renderer, Scene};
+use fr_render::{DrawList, Renderer, Scene as RenderScene};
+use fr_scene::{GpuResources, ResourceCache};
 use fr_time::{FixedStepper, FrameClock};
 use fr_ui::{Theme, Ui};
-use fr_window::{Window, WindowConfig, WindowError, WindowHandler};
+use fr_window::{Window, WindowHandler};
 
-use crate::{App, Assets, FixedStep, Frame, Input};
-
-/// A failure to start or run the engine.
-#[derive(Debug)]
-pub enum EngineError {
-    /// The window or its event loop failed.
-    Window(WindowError),
-    /// The graphics device could not be set up.
-    Render(RenderError),
-}
-
-impl fmt::Display for EngineError {
-    /// Writes the failure with the cause that produced it.
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Window(error) => write!(f, "{error}"),
-            Self::Render(error) => write!(f, "{error}"),
-        }
-    }
-}
-
-impl std::error::Error for EngineError {
-    /// The underlying window or render error.
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            Self::Window(error) => Some(error),
-            Self::Render(error) => Some(error),
-        }
-    }
-}
+use crate::app::App;
+use crate::error::EngineError;
+use crate::simulation::Simulation;
+use crate::timing::{FixedFrameInfo, FrameInfo};
 
 /// The most fixed steps one frame may run before the remaining time is dropped.
 const MAX_FIXED_STEPS_PER_FRAME: u32 = 8;
 
 /// Connects an [`App`] to the window, the clock, the renderer and the UI.
-struct Host<A: App> {
+pub(crate) struct Host<'a, A: App> {
     /// The game being driven.
-    app: A,
+    app: &'a mut A,
+    /// The scene, runtime, assets and input.
+    pub(crate) simulation: Simulation,
     /// The renderer, once the window exists.
     renderer: Option<Renderer>,
+    /// What is on the graphics device.
+    cache: ResourceCache,
     /// The UI state that outlives each frame's tree.
     ui: Ui<A::Message>,
     /// The primitives of the frame being built, reused from frame to frame.
     list: DrawList,
-    /// The 3D scene the app describes each frame, reused from frame to frame.
-    scene: Scene,
+    /// The 3D frame the stage describes, reused from frame to frame.
+    frame: RenderScene,
     /// Times each frame.
     clock: FrameClock,
     /// Turns frame times into fixed steps.
@@ -65,11 +44,40 @@ struct Host<A: App> {
     size: (u32, u32),
     /// The physical pixels per logical pixel.
     scale_factor: f64,
+    /// The frames after which the loop ends; zero for never.
+    max_frames: u64,
     /// The first failure, reported when the loop ends.
-    error: Option<RenderError>,
+    pub(crate) failure: Option<EngineError>,
 }
 
-impl<A: App> Host<A> {
+impl<'a, A: App> Host<'a, A> {
+    /// A host that drives `app` over `simulation`.
+    pub(crate) fn new(app: &'a mut A, simulation: Simulation, max_frames: u64) -> Self {
+        Self {
+            app,
+            simulation,
+            renderer: None,
+            cache: ResourceCache::default(),
+            ui: Ui::new(Theme::default()),
+            list: DrawList::new(Size::zero()),
+            frame: RenderScene::default(),
+            clock: FrameClock::new(),
+            stepper: FixedStepper::new(1.0 / 60.0, MAX_FIXED_STEPS_PER_FRAME),
+            fixed_steps: 0,
+            size: (0, 0),
+            scale_factor: 1.0,
+            max_frames,
+            failure: None,
+        }
+    }
+
+    /// Keeps the first failure; the loop ends at the end of the frame.
+    fn fail(&mut self, error: impl Into<EngineError>) {
+        if self.failure.is_none() {
+            self.failure = Some(error.into());
+        }
+    }
+
     /// Passes the renderer the latest size and scale factor.
     fn resize_renderer(&mut self) {
         if let Some(renderer) = &mut self.renderer {
@@ -79,13 +87,105 @@ impl<A: App> Host<A> {
 
     /// Applies the message a control sent, if it sent one.
     fn deliver(&mut self, message: Option<A::Message>) {
-        if let Some(message) = message {
-            self.app.message(message);
+        if let Some(message) = message
+            && let Err(error) = self.app.message(&mut self.simulation.context(), message)
+        {
+            self.fail(error);
         }
+    }
+
+    /// Runs the fixed steps the frame owes and answers how far the frame is
+    /// into the next one. A game that does not simulate runs none and draws the
+    /// bodies where the last step left them.
+    fn run_fixed_steps(&mut self, delta_seconds: f32) -> Result<f32, EngineError> {
+        if !self.app.simulates_physics() {
+            return Ok(1.0);
+        }
+        let timestep = self.app.fixed_timestep();
+        if timestep <= 0.0 {
+            return Ok(1.0);
+        }
+        if self.stepper.step() != timestep {
+            self.stepper.set_step(timestep);
+        }
+        for _ in 0..self.stepper.advance(delta_seconds) {
+            let info = FixedFrameInfo {
+                index: self.fixed_steps,
+                delta_seconds: timestep,
+            };
+            self.simulation.fixed_update(&mut *self.app, &info)?;
+            self.fixed_steps += 1;
+        }
+        Ok(self.stepper.alpha())
+    }
+
+    /// Runs one frame: fixed steps, updates, the UI, the structural boundary,
+    /// transform resolution and interpolation, then the draw.
+    fn run_frame(&mut self) -> Result<(), EngineError> {
+        self.clock.tick();
+        let delta_seconds = self.clock.delta_seconds();
+        let interpolation = self.run_fixed_steps(delta_seconds)?;
+        let info = FrameInfo {
+            delta_seconds,
+            index: self.clock.frame(),
+            width: self.size.0,
+            height: self.size.1,
+            interpolation,
+        };
+        self.simulation.update(&mut *self.app, &info)?;
+        self.simulation.input.end_frame();
+        self.build_ui();
+        self.simulation.structural_boundary()?;
+        self.simulation.prepare_frame(interpolation);
+        self.draw()
+    }
+
+    /// Builds this frame's UI tree and paints it into the draw list.
+    fn build_ui(&mut self) {
+        let Some(renderer) = &mut self.renderer else {
+            return;
+        };
+        let theme = *self.ui.theme();
+        let viewport = renderer.size();
+        self.list.reset(viewport);
+        let view = self.app.view(&theme);
+        self.ui.draw(
+            renderer.text(),
+            &mut self.list,
+            viewport,
+            Point::default(),
+            view,
+        );
+    }
+
+    /// Describes the stage as a 3D frame and hands it and the UI to the renderer.
+    fn draw(&mut self) -> Result<(), EngineError> {
+        let Some(renderer) = &mut self.renderer else {
+            return Ok(());
+        };
+        let vsync = self.app.vsync();
+        if renderer.vsync() != vsync {
+            renderer.set_vsync(vsync);
+        }
+        let mut resources = GpuResources {
+            renderer,
+            assets: &mut self.simulation.assets,
+            cache: &mut self.cache,
+        };
+        self.simulation
+            .scene
+            .build_render_scene(&mut resources, &mut self.frame)?;
+        let clear = self.simulation.scene.clear_color();
+        renderer.render(
+            &self.list,
+            Some(&self.frame),
+            Rgba::new(clear.r, clear.g, clear.b, clear.a),
+        );
+        Ok(())
     }
 }
 
-impl<A: App> WindowHandler for Host<A> {
+impl<A: App> WindowHandler for Host<'_, A> {
     /// Creates the renderer for the new window.
     fn created(&mut self, window: &Window) {
         self.size = window.size();
@@ -96,11 +196,8 @@ impl<A: App> WindowHandler for Host<A> {
             self.size.1,
             self.scale_factor as f32,
         ) {
-            Ok(mut renderer) => {
-                self.app.init(&mut Assets::new(&mut renderer));
-                self.renderer = Some(renderer);
-            }
-            Err(error) => self.error = Some(error),
+            Ok(renderer) => self.renderer = Some(renderer),
+            Err(error) => self.fail(error),
         }
     }
 
@@ -116,117 +213,66 @@ impl<A: App> WindowHandler for Host<A> {
         self.resize_renderer();
     }
 
-    /// Updates the game, builds its tree, then draws the frame.
+    /// Runs one frame, keeping the failure that ends the loop.
     fn redraw(&mut self) {
-        let Some(renderer) = &mut self.renderer else {
+        if self.renderer.is_none() || self.failure.is_some() {
             return;
-        };
-        self.clock.tick();
-        let fixed_timestep = self.app.fixed_timestep();
-        if self.stepper.step() != fixed_timestep {
-            self.stepper.set_step(fixed_timestep);
         }
-        for _ in 0..self.stepper.advance(self.clock.delta_seconds()) {
-            self.app.fixed_update(&FixedStep {
-                index: self.fixed_steps,
-                delta_seconds: fixed_timestep,
-            });
-            self.fixed_steps += 1;
+        if let Err(error) = self.run_frame() {
+            self.fail(error);
         }
-        self.app.update(&Frame {
-            delta_seconds: self.clock.delta_seconds(),
-            index: self.clock.frame(),
-            width: self.size.0,
-            height: self.size.1,
-            interpolation: self.stepper.alpha(),
-        });
-
-        self.scene.clear();
-        self.app.scene(&mut self.scene);
-
-        let theme = *self.ui.theme();
-        let viewport = renderer.size();
-        self.list.reset(viewport);
-        let view = self.app.view(&theme);
-        self.ui.draw(
-            renderer.text(),
-            &mut self.list,
-            viewport,
-            Point::default(),
-            view,
-        );
-        let vsync = self.app.vsync();
-        if renderer.vsync() != vsync {
-            renderer.set_vsync(vsync);
-        }
-        renderer.render(&self.list, Some(&self.scene), self.app.clear_color(&theme));
     }
 
-    /// Moves the pointer in the UI.
+    /// Moves the pointer in the UI and the input state.
     fn pointer_moved(&mut self, x: f32, y: f32) {
-        self.ui.pointer_moved(Point::new(x, y));
-        self.app.input(&Input::PointerMoved { x, y });
+        let message = self.ui.pointer_moved(Point::new(x, y));
+        self.deliver(message);
+        self.simulation.input.pointer_moved(x, y);
     }
 
-    /// Takes the pointer out of the UI.
+    /// Takes the pointer out of the UI and the input state.
     fn pointer_left(&mut self) {
         self.ui.pointer_left();
-        self.app.input(&Input::PointerLeft);
+        self.simulation.input.pointer_left();
     }
 
-    /// Presses or releases a button in the UI, and tells the app what the UI did not take.
+    /// Presses or releases a button in the UI, and tells the game what the UI
+    /// did not take: a press over the UI never reaches the game, a release
+    /// always does, so a drag is never left half done.
     fn pointer_button(&mut self, button: PointerButton, state: ButtonState) {
         let over_ui = self.ui.pointer_over_region();
         let message = self.ui.pointer_button(button, state);
         self.deliver(message);
         if state == ButtonState::Released || !over_ui {
-            self.app.input(&Input::PointerButton { button, state });
+            self.simulation.input.button(button, state);
         }
     }
 
-    /// Tells the app about scrolling that is not over the UI.
+    /// Gives the wheel to the scroll area under the pointer, and tells the game
+    /// about scrolling that is not over the UI.
     fn scrolled(&mut self, delta: ScrollDelta) {
+        let message = self.ui.scrolled(delta);
+        self.deliver(message);
         if !self.ui.pointer_over_region() {
-            self.app.input(&Input::Scrolled(delta));
+            self.simulation.input.scrolled(delta);
         }
     }
 
-    /// Moves focus on tab, activates it on enter or space, drops it on escape.
+    /// Records the key for the game, then moves focus on tab, activates it on
+    /// enter or space, drops it on escape.
     fn key(&mut self, event: &KeyEvent) {
-        self.app.input(&Input::Key(event.clone()));
+        self.simulation.input.key(event.clone());
         let message = self.ui.key(event);
         self.deliver(message);
     }
 
     /// Ignores text, which no UI element takes yet.
     fn text_input(&mut self, _text: &str) {}
-}
 
-/// Opens a window titled `title` and runs `app` until the window is closed.
-///
-/// # Errors
-///
-/// Returns [`EngineError`] when the window or the graphics device cannot be set up.
-pub fn run<A: App>(title: &str, app: A) -> Result<(), EngineError> {
-    let ui = Ui::new(Theme::default());
-    let mut host = Host {
-        app,
-        renderer: None,
-        ui,
-        list: DrawList::new(Size::zero()),
-        scene: Scene::default(),
-        clock: FrameClock::new(),
-        stepper: FixedStepper::new(1.0 / 60.0, MAX_FIXED_STEPS_PER_FRAME),
-        fixed_steps: 0,
-        size: (0, 0),
-        scale_factor: 1.0,
-        error: None,
-    };
-    let config = WindowConfig {
-        title: title.to_owned(),
-        ..WindowConfig::default()
-    };
-    fr_window::run(config, &mut host).map_err(EngineError::Window)?;
-    host.error
-        .map_or(Ok(()), |error| Err(EngineError::Render(error)))
+    /// Whether a failure, the frame limit or the game ends the loop.
+    fn wants_exit(&self) -> bool {
+        self.failure.is_some()
+            || self.app.wants_exit()
+            || (self.max_frames > 0 && self.clock.frame() >= self.max_frames)
+    }
 }

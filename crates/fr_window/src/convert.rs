@@ -51,6 +51,25 @@ pub(crate) fn modifiers(state: ModifiersState) -> Modifiers {
     }
 }
 
+/// The number of the function key `named` is, when it is one of F1 to F12.
+fn function_key(named: &NamedKey) -> Option<u8> {
+    match named {
+        NamedKey::F1 => Some(1),
+        NamedKey::F2 => Some(2),
+        NamedKey::F3 => Some(3),
+        NamedKey::F4 => Some(4),
+        NamedKey::F5 => Some(5),
+        NamedKey::F6 => Some(6),
+        NamedKey::F7 => Some(7),
+        NamedKey::F8 => Some(8),
+        NamedKey::F9 => Some(9),
+        NamedKey::F10 => Some(10),
+        NamedKey::F11 => Some(11),
+        NamedKey::F12 => Some(12),
+        _ => None,
+    }
+}
+
 /// The key winit reports as `key`.
 pub(crate) fn key(key: &WinitKey) -> Key {
     match key {
@@ -67,6 +86,7 @@ pub(crate) fn key(key: &WinitKey) -> Key {
         WinitKey::Named(NamedKey::ArrowRight) => Key::ArrowRight,
         WinitKey::Named(NamedKey::Home) => Key::Home,
         WinitKey::Named(NamedKey::End) => Key::End,
+        WinitKey::Named(named) => function_key(named).map_or(Key::Other, Key::Function),
         _ => Key::Other,
     }
 }

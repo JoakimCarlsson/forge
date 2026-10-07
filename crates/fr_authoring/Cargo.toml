@@ -1,0 +1,17 @@
+[package]
+name = "fr_authoring"
+description = "Headless authoring layer of the forge engine: documents, commands, history, selection, editing rules, workspaces, project file operations and launch planning."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+fr_document.workspace = true
+fr_math.workspace = true
+fr_project.workspace = true
+fr_transform.workspace = true
+
+[lints]
+workspace = true

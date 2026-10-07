@@ -39,8 +39,20 @@ pub trait WindowHandler {
     /// Called with the text a key press produced.
     fn text_input(&mut self, text: &str);
 
-    /// Called when the user asks to close the window; the loop exits afterwards.
+    /// Called when the user asks to close the window; the loop exits afterwards
+    /// unless [`WindowHandler::keeps_open`] answers true.
     fn close_requested(&mut self) {}
+
+    /// Asked after [`WindowHandler::close_requested`]: true keeps the window
+    /// open, as a handler does while it asks what to do with unsaved work.
+    fn keeps_open(&self) -> bool {
+        false
+    }
+
+    /// Asked after every redraw; the loop exits when it answers true.
+    fn wants_exit(&self) -> bool {
+        false
+    }
 }
 
 impl<H: WindowHandler + ?Sized> WindowHandler for &mut H {
@@ -97,5 +109,15 @@ impl<H: WindowHandler + ?Sized> WindowHandler for &mut H {
     /// Forwards to the borrowed handler.
     fn close_requested(&mut self) {
         (**self).close_requested();
+    }
+
+    /// Forwards to the borrowed handler.
+    fn keeps_open(&self) -> bool {
+        (**self).keeps_open()
+    }
+
+    /// Forwards to the borrowed handler.
+    fn wants_exit(&self) -> bool {
+        (**self).wants_exit()
     }
 }
