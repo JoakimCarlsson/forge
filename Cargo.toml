@@ -15,6 +15,7 @@ fr_window = { version = "0.1.0", path = "crates/fr_window" }
 fr_render = { version = "0.1.0", path = "crates/fr_render" }
 fr_ui = { version = "0.1.0", path = "crates/fr_ui" }
 fr_assets = { version = "0.1.0", path = "crates/fr_assets" }
+fr_physics = { version = "0.1.0", path = "crates/fr_physics" }
 
 [workspace.lints.rust]
 missing_docs = "warn"

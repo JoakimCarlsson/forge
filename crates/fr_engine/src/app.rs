@@ -17,6 +17,18 @@ pub struct Frame {
     pub width: u32,
     /// The window's drawable height in physical pixels.
     pub height: u32,
+    /// How far this frame is into the next fixed step, in zero to one: the blend factor for
+    /// drawing between the last two states of a fixed update.
+    pub interpolation: f32,
+}
+
+/// One fixed step of the simulation, as handed to [`App::fixed_update`].
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FixedStep {
+    /// The number of fixed steps run before this one.
+    pub index: u64,
+    /// The length of the step in seconds, which is [`App::fixed_timestep`].
+    pub delta_seconds: f32,
 }
 
 /// Input the UI did not take, in logical pixels.
@@ -59,8 +71,18 @@ pub trait App {
     /// Called once the renderer exists, before the first frame, to load assets.
     fn init(&mut self, _assets: &mut Assets) {}
 
-    /// Advances the game by one frame.
+    /// Advances the game by one frame, after the fixed steps that frame owes.
     fn update(&mut self, frame: &Frame);
+
+    /// The length of a fixed step in seconds. The engine calls [`App::fixed_update`] as many
+    /// times per frame as whole steps of this length have passed; zero or less turns fixed
+    /// steps off.
+    fn fixed_timestep(&self) -> f32 {
+        1.0 / 60.0
+    }
+
+    /// Advances the simulation by one fixed step, such as a physics world.
+    fn fixed_update(&mut self, _step: &FixedStep) {}
 
     /// Applies one message sent by a control in the tree last built.
     fn message(&mut self, _message: Self::Message) {}

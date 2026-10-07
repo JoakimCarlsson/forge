@@ -1,4 +1,4 @@
-EXAMPLE ?= model
+EXAMPLE ?= demo
 ARGS ?=
 
 .PHONY: run debug build fmt lint test clean

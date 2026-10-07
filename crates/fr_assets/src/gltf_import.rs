@@ -5,12 +5,17 @@
 //! textures and `KHR_materials_emissive_strength`; samplers; and the default
 //! scene's node hierarchy, flattened to world transforms; and
 //! `KHR_lights_punctual` lights, with their intensities passed through as
-//! written. Not read: vertex colours, further texture coordinate sets, skins,
-//! animations and cameras.
+//! written. Skins are read only as a [`Skeleton`] of joint nodes (see
+//! [`load_skeleton`]). Not read: vertex colours, further texture coordinate
+//! sets, skinned meshes, weights, animations and cameras.
 
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
-use fr_core::{DirectionalLight, Light, Mat4, PointLight, SpotLight, Transform, Vec2, Vec3, Vec4};
+use fr_core::{
+    Bone, DirectionalLight, Light, Mat4, PointLight, Skeleton, SkeletonError, SpotLight, Transform,
+    Vec2, Vec3, Vec4,
+};
 use gltf::image::Format;
 use gltf::mesh::Mode;
 
@@ -81,6 +86,142 @@ pub fn load_gltf(path: impl AsRef<Path>) -> Result<ModelData, AssetError> {
         parts: placed.parts,
         lights: placed.lights,
     })
+}
+
+/// Reads the first skin of the glTF or GLB file at `path` as a [`Skeleton`], or
+/// `None` when the file has no skin.
+///
+/// Only the document is parsed: buffers and images are not loaded.
+///
+/// # Errors
+///
+/// Returns [`AssetError`] when the file cannot be read or parsed, or when its
+/// joints do not form a valid skeleton.
+pub fn load_skeleton(path: impl AsRef<Path>) -> Result<Option<Skeleton>, AssetError> {
+    let path = path.as_ref();
+    let document = gltf::Gltf::open(path)
+        .map_err(|source| AssetError::import(path, source))?
+        .document;
+    document
+        .skins()
+        .next()
+        .map(|skin| {
+            skeleton_from_skin(&document, &skin)
+                .map_err(|error| AssetError::malformed(path, error.to_string()))
+        })
+        .transpose()
+}
+
+/// Turns the joint nodes of `skin` into a [`Skeleton`] in model space.
+///
+/// Bones keep the skin's joint order, except that a parent is moved ahead of its
+/// first child when it comes later. A joint whose parent node is not a joint is a
+/// root, and its bind pose includes every ancestor node above it. Names come
+/// from the nodes, falling back to `bone{node index}`, and repeats get a
+/// numeric suffix. Scale is dropped.
+///
+/// # Errors
+///
+/// Returns [`SkeletonError`] when the result is not a valid skeleton.
+pub fn skeleton_from_skin(
+    document: &gltf::Document,
+    skin: &gltf::Skin<'_>,
+) -> Result<Skeleton, SkeletonError> {
+    let parents = node_parents(document);
+    let joints: Vec<usize> = skin.joints().map(|joint| joint.index()).collect();
+    let joint_parent = |node: usize| {
+        parents
+            .get(&node)
+            .copied()
+            .filter(|parent| joints.contains(parent))
+    };
+    let order = parents_first(&joints, joint_parent);
+    let slots: HashMap<usize, usize> = order
+        .iter()
+        .enumerate()
+        .map(|(slot, &node)| (node, slot))
+        .collect();
+    let nodes: HashMap<usize, gltf::Node<'_>> =
+        document.nodes().map(|node| (node.index(), node)).collect();
+    let mut used = HashSet::new();
+    let bones = order
+        .iter()
+        .filter_map(|node| nodes.get(node))
+        .map(|node| {
+            let parent = joint_parent(node.index()).and_then(|parent| slots.get(&parent).copied());
+            Bone {
+                name: unique_name(node, &mut used),
+                parent,
+                bind_local: bind_local(node, parent.is_some(), &parents, &nodes),
+            }
+        })
+        .collect();
+    Skeleton::new(bones)
+}
+
+/// Maps each node that is somebody's child to its parent.
+fn node_parents(document: &gltf::Document) -> HashMap<usize, usize> {
+    document
+        .nodes()
+        .flat_map(|node| {
+            node.children()
+                .map(|child| (child.index(), node.index()))
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
+/// `joints` in their own order with every joint placed after its parent joint.
+fn parents_first(joints: &[usize], joint_parent: impl Fn(usize) -> Option<usize>) -> Vec<usize> {
+    let mut order: Vec<usize> = Vec::with_capacity(joints.len());
+    for &joint in joints {
+        let mut chain = Vec::new();
+        let mut current = Some(joint);
+        while let Some(node) = current.filter(|node| !order.contains(node)) {
+            if chain.contains(&node) || chain.len() > joints.len() {
+                break;
+            }
+            chain.push(node);
+            current = joint_parent(node);
+        }
+        order.extend(chain.into_iter().rev());
+    }
+    order
+}
+
+/// A name for `node` that is not in `used`, which then includes it.
+fn unique_name(node: &gltf::Node<'_>, used: &mut HashSet<String>) -> String {
+    let base = node
+        .name()
+        .map_or_else(|| format!("bone{}", node.index()), str::to_owned);
+    let mut name = base.clone();
+    let mut suffix = 1;
+    while !used.insert(name.clone()) {
+        name = format!("{base}.{suffix:03}");
+        suffix += 1;
+    }
+    name
+}
+
+/// The bind pose of a joint `node`: its own local transform when its parent is a
+/// joint, else that composed with every ancestor node above it.
+fn bind_local(
+    node: &gltf::Node<'_>,
+    parent_is_joint: bool,
+    parents: &HashMap<usize, usize>,
+    nodes: &HashMap<usize, gltf::Node<'_>>,
+) -> Transform {
+    let mut matrix = Mat4::from_cols_array_2d(&node.transform().matrix());
+    let mut current = node.index();
+    while let Some(ancestor) = parents
+        .get(&current)
+        .filter(|_| !parent_is_joint)
+        .and_then(|parent| nodes.get(parent))
+    {
+        matrix = Mat4::from_cols_array_2d(&ancestor.transform().matrix()) * matrix;
+        current = ancestor.index();
+    }
+    Transform::from_matrix(matrix).with_scale(Vec3::ONE)
 }
 
 /// What the node hierarchy places: mesh parts and lights.

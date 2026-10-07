@@ -620,9 +620,17 @@ version = "0.1.0"
 dependencies = [
  "fr_assets",
  "fr_core",
+ "fr_physics",
  "fr_render",
  "fr_ui",
  "fr_window",
+]
+
+[[package]]
+name = "fr_physics"
+version = "0.1.0"
+dependencies = [
+ "fr_core",
 ]
 
 [[package]]

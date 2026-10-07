@@ -16,3 +16,4 @@ fr_assets.workspace = true
 fr_window.workspace = true
 fr_render.workspace = true
 fr_ui.workspace = true
+fr_physics.workspace = true

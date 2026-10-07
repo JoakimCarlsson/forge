@@ -1,4 +1,4 @@
-//! Built-in shapes: a cube, a sphere and a plane.
+//! Built-in shapes: a cube, a sphere, a plane, a cylinder and a capsule.
 
 use std::f32::consts::{PI, TAU};
 
@@ -101,5 +101,113 @@ pub fn sphere(radius: f32, segments: u32, rings: u32) -> MeshData {
             mesh.indices.extend([a, b, a + 1, a + 1, b, b + 1]);
         }
     }
+    finish(mesh)
+}
+
+/// One point of the outline a surface of revolution is swept from.
+struct ProfilePoint {
+    /// Distance from the Y axis and height.
+    position: Vec2,
+    /// The surface normal there as a component away from the axis and one along Y.
+    normal: Vec2,
+}
+
+impl ProfilePoint {
+    /// A point at `radius` and `y` with the normal `(normal_radial, normal_y)`.
+    fn new(radius: f32, y: f32, normal_radial: f32, normal_y: f32) -> Self {
+        Self {
+            position: Vec2::new(radius, y),
+            normal: Vec2::new(normal_radial, normal_y),
+        }
+    }
+}
+
+/// Sweeps `profile`, listed from top to bottom, once around Y in `segments`
+/// slices and appends the surface.
+///
+/// The texture coordinate `u` runs around the axis and `v` along the profile by
+/// its length.
+fn push_revolved(mesh: &mut MeshData, profile: &[ProfilePoint], segments: u32) {
+    let base = mesh.positions.len() as u32;
+    let lengths: Vec<f32> = profile
+        .iter()
+        .scan((0.0, None::<Vec2>), |(total, last), point| {
+            if let Some(previous) = last.replace(point.position) {
+                *total += previous.distance(point.position);
+            }
+            Some(*total)
+        })
+        .collect();
+    let total = lengths.last().copied().unwrap_or(0.0);
+    for (point, length) in profile.iter().zip(&lengths) {
+        let v = if total > 0.0 { length / total } else { 0.0 };
+        for segment in 0..=segments {
+            let u = segment as f32 / segments as f32;
+            let azimuth = u * TAU;
+            let outward = Vec3::new(azimuth.cos(), 0.0, -azimuth.sin());
+            mesh.positions
+                .push(outward * point.position.x + Vec3::Y * point.position.y);
+            mesh.normals
+                .push(outward * point.normal.x + Vec3::Y * point.normal.y);
+            mesh.uvs.push(Vec2::new(u, v));
+        }
+    }
+    let stride = segments + 1;
+    for row in 0..profile.len().saturating_sub(1) as u32 {
+        for segment in 0..segments {
+            let a = base + row * stride + segment;
+            let b = a + stride;
+            mesh.indices.extend([a, b, a + 1, a + 1, b, b + 1]);
+        }
+    }
+}
+
+/// A closed cylinder around Y centred on the origin, with `segments` slices
+/// clamped to at least 3.
+///
+/// The side has smooth normals; each cap is flat with its own vertices.
+pub fn cylinder(radius: f32, height: f32, segments: u32) -> MeshData {
+    let segments = segments.max(3);
+    let half = height * 0.5;
+    let mut mesh = MeshData::default();
+    let top = [
+        ProfilePoint::new(0.0, half, 0.0, 1.0),
+        ProfilePoint::new(radius, half, 0.0, 1.0),
+    ];
+    let side = [
+        ProfilePoint::new(radius, half, 1.0, 0.0),
+        ProfilePoint::new(radius, -half, 1.0, 0.0),
+    ];
+    let bottom = [
+        ProfilePoint::new(radius, -half, 0.0, -1.0),
+        ProfilePoint::new(0.0, -half, 0.0, -1.0),
+    ];
+    for profile in [&top[..], &side[..], &bottom[..]] {
+        push_revolved(&mut mesh, profile, segments);
+    }
+    finish(mesh)
+}
+
+/// A capsule around Y centred on the origin: a cylinder of `cylinder_height`
+/// capped by two hemispheres of `radius`, so it is `cylinder_height + 2 * radius` long.
+///
+/// `segments` slices around Y and `rings` bands per hemisphere are clamped to at
+/// least 3 and 2.
+pub fn capsule(radius: f32, cylinder_height: f32, segments: u32, rings: u32) -> MeshData {
+    let segments = segments.max(3);
+    let rings = rings.max(2);
+    let half = cylinder_height * 0.5;
+    let hemisphere = |centre: f32, first: u32| {
+        (first..first + rings + 1).map(move |ring| {
+            let polar = ring as f32 / (2 * rings) as f32 * PI;
+            let (sin, cos) = polar.sin_cos();
+            ProfilePoint::new(radius * sin, centre + radius * cos, sin, cos)
+        })
+    };
+    let profile: Vec<ProfilePoint> = hemisphere(half, 0)
+        .chain(hemisphere(-half, rings))
+        .collect();
+    let mut mesh = MeshData::default();
+    push_revolved(&mut mesh, &profile, segments);
     finish(mesh)
 }

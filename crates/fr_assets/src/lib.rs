@@ -15,9 +15,9 @@ mod model;
 mod primitives;
 
 pub use error::AssetError;
-pub use gltf_import::load_gltf;
+pub use gltf_import::{load_gltf, load_skeleton, skeleton_from_skin};
 pub use image::{Filter, ImageData, SamplerData, TextureData, Wrap};
 pub use material::{AlphaMode, MaterialData, TextureSlot};
 pub use mesh::MeshData;
 pub use model::{ModelData, ModelPart};
-pub use primitives::{cube, plane, sphere};
+pub use primitives::{capsule, cube, cylinder, plane, sphere};

@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use fr_core::FrameClock;
+use fr_core::{FixedStepper, FrameClock};
 use fr_render::{DrawList, Point, RenderError, Renderer, Scene, Size};
 use fr_ui::{Theme, Ui};
 use fr_window::{
@@ -10,7 +10,7 @@ use fr_window::{
     WindowHandler,
 };
 
-use crate::{App, Assets, Frame, Input};
+use crate::{App, Assets, FixedStep, Frame, Input};
 
 /// A failure to start or run the engine.
 #[derive(Debug)]
@@ -41,6 +41,9 @@ impl std::error::Error for EngineError {
     }
 }
 
+/// The most fixed steps one frame may run before the remaining time is dropped.
+const MAX_FIXED_STEPS_PER_FRAME: u32 = 8;
+
 /// Connects an [`App`] to the window, the clock, the renderer and the UI.
 struct Host<A: App> {
     /// The game being driven.
@@ -55,6 +58,10 @@ struct Host<A: App> {
     scene: Scene,
     /// Times each frame.
     clock: FrameClock,
+    /// Turns frame times into fixed steps.
+    stepper: FixedStepper,
+    /// The number of fixed steps run so far.
+    fixed_steps: u64,
     /// The current drawable size in physical pixels.
     size: (u32, u32),
     /// The physical pixels per logical pixel.
@@ -116,11 +123,23 @@ impl<A: App> WindowHandler for Host<A> {
             return;
         };
         self.clock.tick();
+        let fixed_timestep = self.app.fixed_timestep();
+        if self.stepper.step() != fixed_timestep {
+            self.stepper.set_step(fixed_timestep);
+        }
+        for _ in 0..self.stepper.advance(self.clock.delta_seconds()) {
+            self.app.fixed_update(&FixedStep {
+                index: self.fixed_steps,
+                delta_seconds: fixed_timestep,
+            });
+            self.fixed_steps += 1;
+        }
         self.app.update(&Frame {
             delta_seconds: self.clock.delta_seconds(),
             index: self.clock.frame(),
             width: self.size.0,
             height: self.size.1,
+            interpolation: self.stepper.alpha(),
         });
 
         self.scene.clear();
@@ -216,6 +235,8 @@ pub fn run<A: App>(title: &str, app: A) -> Result<(), EngineError> {
         list: DrawList::new(Size::zero()),
         scene: Scene::default(),
         clock: FrameClock::new(),
+        stepper: FixedStepper::new(1.0 / 60.0, MAX_FIXED_STEPS_PER_FRAME),
+        fixed_steps: 0,
         size: (0, 0),
         scale_factor: 1.0,
         error: None,
