@@ -4,7 +4,6 @@
 //! speculative contacts, a dynamic AABB tree broad phase, persistent islands with sleeping and
 //! joints with limits, springs and motors.
 
-pub mod aabb;
 pub mod body;
 mod broad_phase;
 pub mod constants;

@@ -1,6 +1,12 @@
 //! Metallic-roughness material factors and texture slots.
 
-use fr_core::{Vec3, Vec4, srgb_to_linear};
+use fr_color::srgb_to_linear;
+use fr_handle::Handle;
+use fr_image::TextureId;
+use fr_math::{Vec3, Vec4};
+
+/// A material uploaded to the renderer.
+pub type MaterialId = Handle<MaterialData<TextureId>>;
 
 /// How a material's alpha is interpreted.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]

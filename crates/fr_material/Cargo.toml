@@ -1,0 +1,17 @@
+[package]
+name = "fr_material"
+description = "CPU-side material data of the forge engine."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+fr_math.workspace = true
+fr_color.workspace = true
+fr_handle.workspace = true
+fr_image.workspace = true

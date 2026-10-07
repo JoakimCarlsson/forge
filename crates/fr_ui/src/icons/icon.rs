@@ -5,7 +5,9 @@
 //! never coloured in the file: an icon in a disabled row and the same icon in
 //! a selected one are one drawing, tinted twice.
 
-use fr_render::{Rect, Rgba, Size, Svg};
+use fr_color::Rgba;
+use fr_math::{Rect, Size};
+use fr_render::Svg;
 
 use crate::element::{Element, LayoutContext, PaintContext};
 use crate::style::{Style, Styled};

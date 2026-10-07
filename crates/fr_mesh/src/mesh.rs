@@ -1,6 +1,10 @@
 //! Indexed triangle geometry with the attributes the renderer reads.
 
-use fr_core::{Vec2, Vec3, Vec4};
+use fr_handle::Handle;
+use fr_math::{Vec2, Vec3, Vec4};
+
+/// A mesh uploaded to the renderer.
+pub type MeshId = Handle<MeshData>;
 
 /// An indexed triangle list with a normal, tangent and texture coordinate per vertex.
 ///

@@ -1,7 +1,7 @@
 //! Per step solver data shared by contacts and joints: the body state of a sub-step and the
 //! step context.
 
-use fr_core::{Quat, Vec3};
+use fr_math::{Quat, Vec3};
 
 use crate::math::Softness;
 

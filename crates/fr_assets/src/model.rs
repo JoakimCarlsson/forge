@@ -1,10 +1,10 @@
 //! A whole imported file: geometry, materials, textures and where each part sits.
 
-use fr_core::{Light, Transform};
-
-use crate::image::{ImageData, TextureData};
-use crate::material::MaterialData;
-use crate::mesh::MeshData;
+use fr_image::{ImageData, TextureData};
+use fr_light::Light;
+use fr_material::MaterialData;
+use fr_mesh::MeshData;
+use fr_transform::Transform;
 
 /// One mesh placed in the model with one material.
 #[derive(Clone, Debug, PartialEq)]

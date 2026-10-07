@@ -1,7 +1,7 @@
 //! Contacts between pairs of shapes: the manifold with its warm starting impulses, its update
 //! from the current poses and the recycling of manifolds while the pair barely moves.
 
-use fr_core::{Mat3, Quat, Vec3};
+use fr_math::{Mat3, Quat, Vec3};
 
 use crate::body::{Body, BodyId, BodyType};
 use crate::constants::MAX_MANIFOLD_POINTS;
@@ -12,7 +12,7 @@ use crate::manifold::{
     LocalManifold, SatCache, collide_capsule_and_sphere, collide_capsules,
     collide_hull_and_capsule, collide_hull_and_sphere, collide_hulls, collide_spheres,
 };
-use crate::math::{Pose, abs, dot_quat, modified_cross};
+use crate::math::{Pose, dot_quat, modified_cross};
 use crate::shape::{Shape, ShapeId};
 use crate::slot::Handle;
 
@@ -265,7 +265,7 @@ impl Contact {
         let distance = distance_squared.sqrt();
         let slack = tolerance - distance;
         let qr = crate::math::inv_mul_quat(xfc.rotation, xf.rotation);
-        let arc = modified_cross(abs(crate::math::quat_vector(qr)), max_extent);
+        let arc = modified_cross(crate::math::quat_vector(qr).abs(), max_extent);
         let arc_squared = 4.0 * arc.length_squared();
         if arc_squared >= slack * slack {
             return false;

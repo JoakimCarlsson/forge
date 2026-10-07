@@ -2,7 +2,9 @@
 
 use std::sync::Arc;
 
-use fr_render::{FontStyle, Point, Quad, Rect, Rgba, ShapedRun, Size};
+use fr_color::Rgba;
+use fr_math::{Point, Rect, Size};
+use fr_render::{FontStyle, Quad, ShapedRun};
 
 use crate::element::{Element, LayoutContext, PaintContext};
 use crate::style::{Length, Style, Styled};

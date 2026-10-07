@@ -4,7 +4,7 @@
 //! Within a sub-step the solve stage pushes bodies apart with the soft contact bias, the relax
 //! stage solves again without bias and adds friction, and restitution runs once at the end.
 
-use fr_core::{Mat3, Vec3};
+use fr_math::{Mat3, Vec3};
 
 use crate::constants::{MAX_MANIFOLD_POINTS, MIN_FRICTION_WEIGHT, SPECULATIVE_DISTANCE};
 use crate::contact::{Contact, ContactId};

@@ -12,17 +12,17 @@
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
-use fr_core::{
-    Bone, DirectionalLight, Light, Mat4, PointLight, Skeleton, SkeletonError, SpotLight, Transform,
-    Vec2, Vec3, Vec4,
-};
+use fr_image::{Filter, ImageData, SamplerData, TextureData, Wrap};
+use fr_light::{DirectionalLight, Light, PointLight, SpotLight};
+use fr_material::{AlphaMode, MaterialData};
+use fr_math::{Mat4, Vec2, Vec3, Vec4};
+use fr_mesh::MeshData;
+use fr_skeleton::{Bone, Skeleton, SkeletonError};
+use fr_transform::Transform;
 use gltf::image::Format;
 use gltf::mesh::Mode;
 
 use crate::error::AssetError;
-use crate::image::{Filter, ImageData, SamplerData, TextureData, Wrap};
-use crate::material::{AlphaMode, MaterialData};
-use crate::mesh::MeshData;
 use crate::model::{ModelData, ModelPart};
 
 /// The deepest node nesting accepted before the file is called malformed.

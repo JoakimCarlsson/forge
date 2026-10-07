@@ -6,11 +6,12 @@
 
 use std::collections::BTreeMap;
 
-use fr_core::{Mat3, Vec3};
+use fr_math::{Mat3, Vec3};
 
-use crate::aabb::Aabb;
 use crate::constants::MAX_HULL_ELEMENTS;
-use crate::math::{Plane, Pose, normalize};
+use crate::math::{Pose, normalize};
+use fr_math::Aabb;
+use fr_math::Plane;
 
 /// One vertex of a hull.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

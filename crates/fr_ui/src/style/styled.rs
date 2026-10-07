@@ -1,6 +1,6 @@
 //! Chainable utility setters expressed in spacing-scale steps.
 
-use fr_render::Rgba;
+use fr_color::Rgba;
 
 use crate::style::units::{Align, Axis, Justify, Length, space};
 use crate::style::{Side, Style};

@@ -1,6 +1,6 @@
 //! Translation, rotation and scale of an object in space.
 
-use glam::{Mat4, Quat, Vec3};
+use fr_math::{Mat4, Quat, Vec3};
 
 /// A translation, rotation and non-uniform scale, applied in scale, rotate,
 /// translate order.

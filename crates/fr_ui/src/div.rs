@@ -1,6 +1,8 @@
 //! The one container: a flex box that stacks children along an axis.
 
-use fr_render::{Quad, Rect, Rgba, Size};
+use fr_color::Rgba;
+use fr_math::{Rect, Size};
+use fr_render::Quad;
 
 use crate::element::{Element, Interaction, IntoElement, LayoutContext, PaintContext};
 use crate::style::{Align, Axis, Justify, Length, Side, Style, Styled};

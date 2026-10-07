@@ -1,6 +1,6 @@
 //! The separating axis test between two hulls: face directions of both hulls and edge pairs.
 
-use fr_core::{Mat3, Vec3};
+use fr_math::{Mat3, Vec3};
 
 use crate::constants::{NULL_INDEX, PARALLEL_EDGE_TOL, SPECULATIVE_DISTANCE};
 use crate::hull::Hull;

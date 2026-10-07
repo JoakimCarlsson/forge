@@ -1,13 +1,13 @@
 //! Rigid bodies: static, kinematic and dynamic, with their pose, velocity and mass.
 
-use fr_core::{Mat3, Quat, Vec3};
+use fr_math::{Mat3, Quat, Vec3};
 
 use crate::constants::HUGE;
 use crate::contact::ContactId;
 use crate::geometry::MassData;
 use crate::island::IslandId;
 use crate::joint::JointId;
-use crate::math::{Pose, abs, invert_symmetric, steiner};
+use crate::math::{Pose, invert_symmetric, steiner};
 use crate::shape::ShapeId;
 use crate::slot::Handle;
 
@@ -300,7 +300,7 @@ impl Body {
         for geometry in geometries {
             let extent = geometry.extent(self.local_center);
             self.min_extent = self.min_extent.min(extent.min);
-            self.max_extent = self.max_extent.max(abs(extent.max));
+            self.max_extent = self.max_extent.max(extent.max.abs());
         }
     }
 }

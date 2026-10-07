@@ -1,6 +1,8 @@
 //! The button: a label in a box that sends one message when it is pressed.
 
-use fr_render::{Point, Quad, Rect, Rgba, Size};
+use fr_color::Rgba;
+use fr_math::{Point, Rect, Size};
+use fr_render::Quad;
 
 use crate::element::{Element, Interaction, LayoutContext, PaintContext};
 use crate::style::{Length, Style, Styled, space};

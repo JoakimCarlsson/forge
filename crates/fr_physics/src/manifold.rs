@@ -4,7 +4,7 @@
 //! where negative is penetration and small positive values are speculative. Hulls use the
 //! separating axis test with clipping, the other pairs use GJK and closest point formulas.
 
-use fr_core::Vec3;
+use fr_math::{Plane, Vec3};
 
 use crate::constants::{
     LINEAR_SLOP, MAX_CLIP_POINTS, MAX_MANIFOLD_POINTS, MIN_CAPSULE_LENGTH, NULL_INDEX,
@@ -15,7 +15,7 @@ use crate::distance::{
 };
 use crate::geometry::{Capsule, ShapeProxy, Sphere};
 use crate::hull::Hull;
-use crate::math::{Plane, Pose, arbitrary_perp, length_and_normalize, mul_add, mul_sub, normalize};
+use crate::math::{Pose, arbitrary_perp, length_and_normalize, mul_add, mul_sub, normalize};
 use crate::sat::{AxisKind, SeparatingAxis, compute_separating_axis};
 
 /// The owner of a feature of a contact point.

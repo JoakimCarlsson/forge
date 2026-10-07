@@ -1,11 +1,14 @@
 //! Loading and uploading assets, handed to the app once the renderer exists.
 
+use std::collections::HashMap;
 use std::fmt;
 use std::path::Path;
 
-use fr_assets::{AssetError, ImageData, MaterialData, MeshData, SamplerData};
-use fr_core::{MaterialId, MeshId, TextureId};
-use fr_render::{Model, RenderError, Renderer};
+use fr_assets::{AssetError, ModelData};
+use fr_image::{ImageData, SamplerData, TextureId};
+use fr_material::{MaterialData, MaterialId, TextureSlot};
+use fr_mesh::{MeshData, MeshId};
+use fr_render::{MeshInstance, Model, RenderError, Renderer};
 
 /// A failure to load an asset and put it on the graphics device.
 #[derive(Debug)]
@@ -71,7 +74,70 @@ impl<'a> Assets<'a> {
     /// its contents cannot be uploaded.
     pub fn load_gltf(&mut self, path: impl AsRef<Path>) -> Result<Model, LoadError> {
         let data = fr_assets::load_gltf(path)?;
-        Ok(self.renderer.upload_model(&data)?)
+        Ok(self.upload_model(&data)?)
+    }
+
+    /// Uploads every texture, material and mesh of `model` and returns the placed meshes as
+    /// a [`Model`].
+    ///
+    /// A texture used both as colour and as data is uploaded once for each.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RenderError::InvalidAsset`] when the model refers to an image, texture,
+    /// material or mesh it does not contain, or when one of them is invalid.
+    fn upload_model(&mut self, model: &ModelData) -> Result<Model, RenderError> {
+        let mut uploaded: HashMap<(usize, bool), TextureId> = HashMap::new();
+        let mut materials = Vec::with_capacity(model.materials.len());
+        for material in &model.materials {
+            let resolved = material.try_map_textures(|&texture, slot| {
+                self.upload_model_texture(model, texture, slot, &mut uploaded)
+            })?;
+            materials.push(self.renderer.create_material(&resolved)?);
+        }
+        let meshes = model
+            .meshes
+            .iter()
+            .map(|mesh| self.renderer.create_mesh(mesh))
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut instances = Vec::with_capacity(model.parts.len());
+        for part in &model.parts {
+            instances.push(MeshInstance {
+                mesh: pick_item(&meshes, part.mesh)?,
+                material: match part.material {
+                    Some(index) => pick_item(&materials, index)?,
+                    None => self.renderer.default_material(),
+                },
+                transform: part.transform,
+            });
+        }
+        Ok(Model {
+            instances,
+            lights: model.lights.clone(),
+        })
+    }
+
+    /// The texture `index` of `model` uploaded for `slot`, reusing an earlier upload.
+    fn upload_model_texture(
+        &mut self,
+        model: &ModelData,
+        index: usize,
+        slot: TextureSlot,
+        uploaded: &mut HashMap<(usize, bool), TextureId>,
+    ) -> Result<TextureId, RenderError> {
+        let key = (index, slot.is_srgb());
+        if let Some(&id) = uploaded.get(&key) {
+            return Ok(id);
+        }
+        let missing =
+            || RenderError::InvalidAsset(String::from("a material uses a missing texture"));
+        let texture = model.textures.get(index).ok_or_else(missing)?;
+        let image = model.images.get(texture.image).ok_or_else(missing)?;
+        let id = self
+            .renderer
+            .create_texture(image, texture.sampler, slot.is_srgb())?;
+        uploaded.insert(key, id);
+        Ok(id)
     }
 
     /// Uploads `mesh`.
@@ -113,4 +179,11 @@ impl<'a> Assets<'a> {
     pub fn default_material(&self) -> MaterialId {
         self.renderer.default_material()
     }
+}
+
+/// The item at `index` of a table of uploaded handles.
+fn pick_item<T: Copy>(table: &[T], index: usize) -> Result<T, RenderError> {
+    table.get(index).copied().ok_or_else(|| {
+        RenderError::InvalidAsset(format!("a part refers to the missing item {index}"))
+    })
 }

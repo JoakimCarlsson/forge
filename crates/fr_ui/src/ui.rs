@@ -1,6 +1,8 @@
 //! The window's UI state: input, focus and the regions the last frame left.
 
-use fr_render::{DrawList, Point, Rect, Size, TextSystem};
+use fr_input::{ButtonState, Key, KeyEvent, PointerButton};
+use fr_math::{Point, Rect, Size};
+use fr_render::{DrawList, TextSystem};
 
 use crate::element::{Element, Input, LayoutContext, PaintContext, Region, RegionAction};
 use crate::theme::Theme;
@@ -49,8 +51,45 @@ impl<M> Ui<M> {
         self.input.pressed_at = None;
     }
 
+    /// Routes a pointer button going down or coming up, returning the message of the region a
+    /// primary click completed on.
+    pub fn pointer_button(&mut self, button: PointerButton, state: ButtonState) -> Option<M>
+    where
+        M: Clone,
+    {
+        if button != PointerButton::Primary {
+            return None;
+        }
+        match state {
+            ButtonState::Pressed => {
+                self.pointer_pressed();
+                None
+            }
+            ButtonState::Released => self.pointer_released(),
+        }
+    }
+
+    /// Routes a key: tab and shift-tab move focus, escape drops it, and enter or space
+    /// returns the message of the focused region.
+    pub fn key(&mut self, event: &KeyEvent) -> Option<M>
+    where
+        M: Clone,
+    {
+        if event.state != ButtonState::Pressed {
+            return None;
+        }
+        match event.key {
+            Key::Tab if event.modifiers.shift => self.focus_previous(),
+            Key::Tab => self.focus_next(),
+            Key::Escape => self.clear_focus(),
+            Key::Enter | Key::Space if !event.repeat => return self.activate_focused(),
+            _ => {}
+        }
+        None
+    }
+
     /// Records a press and leaves keyboard focus to keyboard navigation.
-    pub fn pointer_pressed(&mut self) {
+    fn pointer_pressed(&mut self) {
         self.input.pressed_at = self.input.pointer;
         self.focus = None;
     }
@@ -59,7 +98,7 @@ impl<M> Ui<M> {
     ///
     /// A click completes when the press and the release both land in the
     /// topmost region under them.
-    pub fn pointer_released(&mut self) -> Option<M>
+    fn pointer_released(&mut self) -> Option<M>
     where
         M: Clone,
     {
@@ -75,22 +114,22 @@ impl<M> Ui<M> {
     }
 
     /// Moves focus to the next click target in tab order, wrapping around.
-    pub fn focus_next(&mut self) {
+    fn focus_next(&mut self) {
         self.focus = self.step_focus(1);
     }
 
     /// Moves focus to the previous click target in tab order, wrapping around.
-    pub fn focus_previous(&mut self) {
+    fn focus_previous(&mut self) {
         self.focus = self.step_focus(-1);
     }
 
     /// Gives up focus entirely.
-    pub fn clear_focus(&mut self) {
+    fn clear_focus(&mut self) {
         self.focus = None;
     }
 
     /// The message of the focused region, for a key that activates it.
-    pub fn activate_focused(&self) -> Option<M>
+    fn activate_focused(&self) -> Option<M>
     where
         M: Clone,
     {

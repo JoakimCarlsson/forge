@@ -421,8 +421,8 @@ impl World {
         for body_id in bodies {
             if let Some(body) = self.bodies.get_mut(body_id) {
                 body.asleep = true;
-                body.linear_velocity = fr_core::Vec3::ZERO;
-                body.angular_velocity = fr_core::Vec3::ZERO;
+                body.linear_velocity = fr_math::Vec3::ZERO;
+                body.angular_velocity = fr_math::Vec3::ZERO;
             }
         }
         if let Some(island) = self.islands.get_mut(island_id) {

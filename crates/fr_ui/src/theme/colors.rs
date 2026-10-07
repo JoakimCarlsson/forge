@@ -1,7 +1,7 @@
 //! The semantic colours: what a surface, a border or a run of text is painted
 //! in, named for what it means rather than for the hue a theme gives it.
 
-use fr_render::Rgba;
+use fr_color::Rgba;
 
 /// The semantic colours elements are painted in.
 #[derive(Clone, Copy, Debug)]

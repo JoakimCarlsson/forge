@@ -2,9 +2,9 @@
 
 use std::cmp::max;
 
-use fr_core::Vec3;
+use fr_math::Vec3;
 
-use crate::aabb::Aabb;
+use fr_math::Aabb;
 
 /// Index of a node in the tree; also the proxy id of a leaf.
 pub type NodeId = i32;

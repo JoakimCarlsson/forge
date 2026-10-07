@@ -1,12 +1,12 @@
 //! The broad phase: one dynamic AABB tree per body type and the buffer of proxies that moved
 //! since the last pair update.
 
-use fr_core::Vec3;
+use fr_math::Vec3;
 
-use crate::aabb::Aabb;
 use crate::body::BodyType;
 use crate::shape::ShapeId;
 use crate::tree::{NodeId, Tree};
+use fr_math::Aabb;
 
 /// The trees of the three body types and the moved proxies.
 #[derive(Clone, Debug, Default)]

@@ -1,8 +1,9 @@
 //! The game-facing trait, frame description and input events.
 
+use fr_color::Rgba;
+use fr_input::{ButtonState, KeyEvent, PointerButton, ScrollDelta};
 use fr_render::Scene;
-use fr_ui::{Div, Rgba, Theme, div};
-use fr_window::{ButtonState, KeyEvent, PointerButton, ScrollDelta};
+use fr_ui::{Div, Theme, div};
 
 use crate::Assets;
 

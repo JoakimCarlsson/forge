@@ -1,12 +1,12 @@
 //! The end of a step: moving bodies to their solved poses, measuring how still they are, sweeping
 //! fast bodies, refreshing bounds and putting still islands to sleep.
 
-use fr_core::Vec3;
+use fr_math::Vec3;
 
 use crate::body::{BodyId, BodyType};
 use crate::constants::TIME_TO_SLEEP;
 use crate::island::IslandId;
-use crate::math::{abs, inv_rotate, modified_cross, mul_quat, normalize_quat, quat_vector};
+use crate::math::{inv_rotate, modified_cross, mul_quat, normalize_quat, quat_vector};
 use crate::solver::{BodyState, StepContext};
 use crate::world::World;
 
@@ -36,9 +36,9 @@ impl World {
                 inv_rotate(body.pose.rotation, quat_vector(state.delta_rotation));
             body.center += state.delta_position;
             body.pose.rotation = normalize_quat(mul_quat(state.delta_rotation, body.pose.rotation));
-            let velocity_arc = modified_cross(abs(local_omega), body.max_extent);
+            let velocity_arc = modified_cross(local_omega.abs(), body.max_extent);
             let max_velocity = v.length() + velocity_arc.length();
-            let rotation_arc = modified_cross(abs(local_delta_rotation), body.max_extent);
+            let rotation_arc = modified_cross(local_delta_rotation.abs(), body.max_extent);
             let max_delta_position = state.delta_position.length() + 2.0 * rotation_arc.length();
             let position_sleep_factor = 0.5;
             let sleep_velocity =

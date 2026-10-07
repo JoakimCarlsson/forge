@@ -1,7 +1,7 @@
 //! The revolute joint: a hinge about the z axis of the joint frame with an optional angle
 //! limit, spring and motor.
 
-use fr_core::Vec3;
+use fr_math::Vec3;
 
 use crate::joint::JointSim;
 use crate::joint::spherical::{limit_terms, point_constraint_matrix};
@@ -89,7 +89,7 @@ impl Default for RevoluteJoint {
 }
 
 /// The two axes perpendicular to the hinge, from the relative rotation `rel_q` seen in `frame_q`.
-fn perp_axes(frame_q: fr_core::Quat, rel_q: fr_core::Quat) -> (Vec3, Vec3) {
+fn perp_axes(frame_q: fr_math::Quat, rel_q: fr_math::Quat) -> (Vec3, Vec3) {
     let v = Vec3::new(rel_q.x, rel_q.y, rel_q.z);
     let axis_x = (frame_q * (Vec3::X * rel_q.w + v.cross(Vec3::X))) * 0.5;
     let axis_y = (frame_q * (Vec3::Y * rel_q.w + v.cross(Vec3::Y))) * 0.5;

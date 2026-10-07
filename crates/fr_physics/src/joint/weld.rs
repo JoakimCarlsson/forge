@@ -1,7 +1,7 @@
 //! The weld joint: locks the relative position and rotation of two frames, optionally as a
 //! spring.
 
-use fr_core::{Mat3, Quat, Vec3};
+use fr_math::{Mat3, Quat, Vec3};
 
 use crate::joint::JointSim;
 use crate::joint::spherical::point_constraint_matrix;

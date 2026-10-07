@@ -2,13 +2,12 @@
 
 use std::fmt;
 
-use fr_core::{FixedStepper, FrameClock};
-use fr_render::{DrawList, Point, RenderError, Renderer, Scene, Size};
+use fr_input::{ButtonState, KeyEvent, PointerButton, ScrollDelta};
+use fr_math::{Point, Size};
+use fr_render::{DrawList, RenderError, Renderer, Scene};
+use fr_time::{FixedStepper, FrameClock};
 use fr_ui::{Theme, Ui};
-use fr_window::{
-    ButtonState, Key, KeyEvent, PointerButton, ScrollDelta, Window, WindowConfig, WindowError,
-    WindowHandler,
-};
+use fr_window::{Window, WindowConfig, WindowError, WindowHandler};
 
 use crate::{App, Assets, FixedStep, Frame, Input};
 
@@ -178,15 +177,8 @@ impl<A: App> WindowHandler for Host<A> {
     /// Presses or releases a button in the UI, and tells the app what the UI did not take.
     fn pointer_button(&mut self, button: PointerButton, state: ButtonState) {
         let over_ui = self.ui.pointer_over_region();
-        if button == PointerButton::Primary {
-            match state {
-                ButtonState::Pressed => self.ui.pointer_pressed(),
-                ButtonState::Released => {
-                    let message = self.ui.pointer_released();
-                    self.deliver(message);
-                }
-            }
-        }
+        let message = self.ui.pointer_button(button, state);
+        self.deliver(message);
         if state == ButtonState::Released || !over_ui {
             self.app.input(&Input::PointerButton { button, state });
         }
@@ -202,19 +194,8 @@ impl<A: App> WindowHandler for Host<A> {
     /// Moves focus on tab, activates it on enter or space, drops it on escape.
     fn key(&mut self, event: &KeyEvent) {
         self.app.input(&Input::Key(event.clone()));
-        if event.state != ButtonState::Pressed {
-            return;
-        }
-        match event.key {
-            Key::Tab if event.modifiers.shift => self.ui.focus_previous(),
-            Key::Tab => self.ui.focus_next(),
-            Key::Escape => self.ui.clear_focus(),
-            Key::Enter | Key::Space if !event.repeat => {
-                let message = self.ui.activate_focused();
-                self.deliver(message);
-            }
-            _ => {}
-        }
+        let message = self.ui.key(event);
+        self.deliver(message);
     }
 
     /// Ignores text, which no UI element takes yet.

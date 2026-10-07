@@ -5,9 +5,9 @@
 //! it, and a point or spot light's is the illuminance it gives a surface one
 //! unit away and facing it, falling with the square of the distance.
 
-use glam::Vec3;
+use fr_math::Vec3;
 
-use crate::transform::Transform;
+use fr_transform::Transform;
 
 /// The default distance in front of the camera shadows are drawn to.
 const DEFAULT_SHADOW_DISTANCE: f32 = 60.0;

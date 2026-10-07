@@ -9,19 +9,19 @@ use std::sync::Arc;
 
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 
-use fr_assets::{MaterialData, MeshData, ModelData, SamplerData, TextureSlot};
-use fr_core::{MaterialId, MeshId, TextureId};
-use hashbrown::HashMap;
+use fr_color::Rgba;
+use fr_image::{ImageData, SamplerData, TextureId};
+use fr_material::{MaterialData, MaterialId};
+use fr_math::{Rect, Size};
+use fr_mesh::{MeshData, MeshId};
 
 use crate::RenderError;
 use crate::atlas::GlyphAtlas;
-use crate::color::Rgba;
 use crate::draw::DrawList;
 use crate::forward::ForwardPass;
-use crate::geometry::{Rect, Size};
 use crate::pipeline::{GlyphInstance, InstanceBuffer, QuadInstance, Viewport, build_pipeline};
 use crate::resources::Resources;
-use crate::scene::{MeshInstance, Model, Scene};
+use crate::scene::Scene;
 use crate::text::TextSystem;
 
 /// The multisample count the 3D pass uses where the surface supports it.
@@ -233,7 +233,7 @@ impl Renderer {
     /// size or the size exceeds the device's limit.
     pub fn create_texture(
         &mut self,
-        image: &fr_assets::ImageData,
+        image: &ImageData,
         sampler: SamplerData,
         srgb: bool,
     ) -> Result<TextureId, RenderError> {
@@ -261,67 +261,6 @@ impl Renderer {
         material: &MaterialData<TextureId>,
     ) -> Result<MaterialId, RenderError> {
         self.resources.create_material(&self.device, material)
-    }
-
-    /// Uploads every texture, material and mesh of `model` and returns the
-    /// placed meshes as a [`Model`].
-    ///
-    /// A texture used both as colour and as data is uploaded once for each.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`RenderError::InvalidAsset`] when the model refers to an image,
-    /// texture, material or mesh it does not contain, or when one of them is invalid.
-    pub fn upload_model(&mut self, model: &ModelData) -> Result<Model, RenderError> {
-        let mut uploaded: HashMap<(usize, bool), TextureId> = HashMap::new();
-        let mut materials = Vec::with_capacity(model.materials.len());
-        for material in &model.materials {
-            let resolved = material.try_map_textures(|&texture, slot| {
-                self.upload_model_texture(model, texture, slot, &mut uploaded)
-            })?;
-            materials.push(self.create_material(&resolved)?);
-        }
-        let meshes = model
-            .meshes
-            .iter()
-            .map(|mesh| self.create_mesh(mesh))
-            .collect::<Result<Vec<_>, _>>()?;
-        let mut instances = Vec::with_capacity(model.parts.len());
-        for part in &model.parts {
-            instances.push(MeshInstance {
-                mesh: pick_item(&meshes, part.mesh)?,
-                material: match part.material {
-                    Some(index) => pick_item(&materials, index)?,
-                    None => self.default_material,
-                },
-                transform: part.transform,
-            });
-        }
-        Ok(Model {
-            instances,
-            lights: model.lights.clone(),
-        })
-    }
-
-    /// The texture `index` of `model` uploaded for `slot`, reusing an earlier upload.
-    fn upload_model_texture(
-        &mut self,
-        model: &ModelData,
-        index: usize,
-        slot: TextureSlot,
-        uploaded: &mut HashMap<(usize, bool), TextureId>,
-    ) -> Result<TextureId, RenderError> {
-        let key = (index, slot.is_srgb());
-        if let Some(&id) = uploaded.get(&key) {
-            return Ok(id);
-        }
-        let missing =
-            || RenderError::InvalidAsset(String::from("a material uses a missing texture"));
-        let texture = model.textures.get(index).ok_or_else(missing)?;
-        let image = model.images.get(texture.image).ok_or_else(missing)?;
-        let id = self.create_texture(image, texture.sampler, slot.is_srgb())?;
-        uploaded.insert(key, id);
-        Ok(id)
     }
 
     /// The text system layout measures with and draw lists shape through.
@@ -596,13 +535,6 @@ fn pick_present_mode(supported: &[wgpu::PresentMode], vsync: bool) -> wgpu::Pres
         .copied()
         .find(|mode| supported.contains(mode))
         .unwrap_or(wgpu::PresentMode::Fifo)
-}
-
-/// The item at `index` of a table of uploaded handles.
-fn pick_item<T: Copy>(table: &[T], index: usize) -> Result<T, RenderError> {
-    table.get(index).copied().ok_or_else(|| {
-        RenderError::InvalidAsset(format!("a part refers to the missing item {index}"))
-    })
 }
 
 /// Converts a logical clip rectangle to the physical bounds shaders test.

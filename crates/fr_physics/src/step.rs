@@ -2,7 +2,7 @@
 //! with warm starting, relaxation and restitution, and finalizing bodies with sleeping and
 //! continuous collision.
 
-use fr_core::{Mat3, Vec3};
+use fr_math::{Mat3, Vec3};
 
 use crate::body::{Body, BodyId, BodyType};
 use crate::constants::{MAX_RESTITUTION_ITERATIONS, MAX_ROTATION, SPECULATIVE_DISTANCE};
@@ -220,7 +220,7 @@ impl World {
                     linear_velocity: body.linear_velocity,
                     angular_velocity: body.angular_velocity,
                     delta_position: Vec3::ZERO,
-                    delta_rotation: fr_core::Quat::IDENTITY,
+                    delta_rotation: fr_math::Quat::IDENTITY,
                     dynamic: body.is_dynamic(),
                 });
             } else {

@@ -11,7 +11,8 @@ mod units;
 pub use styled::Styled;
 pub use units::{Align, Axis, Edges, Justify, Length, STEP, space};
 
-use fr_render::{Rect, Rgba};
+use fr_color::Rgba;
+use fr_math::Rect;
 
 /// Everything the layout and the painter need to know about one element.
 #[derive(Clone, Copy, Debug)]

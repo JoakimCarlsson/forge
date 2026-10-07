@@ -4,9 +4,9 @@ use std::collections::HashSet;
 use std::error::Error;
 use std::fmt;
 
-use glam::Vec3;
+use fr_math::Vec3;
 
-use crate::transform::Transform;
+use fr_transform::Transform;
 
 /// Names of the bones of [`Skeleton::humanoid`].
 pub mod humanoid {

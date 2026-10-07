@@ -12,3 +12,6 @@ workspace = true
 
 [dependencies]
 fr_render.workspace = true
+fr_math.workspace = true
+fr_color.workspace = true
+fr_input.workspace = true

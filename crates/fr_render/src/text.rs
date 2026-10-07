@@ -7,7 +7,7 @@ use cosmic_text::fontdb::Weight;
 use cosmic_text::{Attrs, Buffer, Family, FamilyOwned, FontSystem, LayoutGlyph, Metrics, Shaping};
 use hashbrown::{DefaultHashBuilder, HashTable};
 
-use crate::geometry::Size;
+use fr_math::Size;
 
 /// Families tried in order before falling back to the platform sans-serif.
 const PREFERRED_SANS: [&str; 5] = [

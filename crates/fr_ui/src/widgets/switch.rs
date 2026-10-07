@@ -1,6 +1,7 @@
 //! The switch: a two-state track and knob, green when it is on.
 
-use fr_render::{Quad, Rect, Size};
+use fr_math::{Rect, Size};
+use fr_render::Quad;
 
 use crate::element::{Element, LayoutContext, PaintContext};
 use crate::style::{Style, Styled};

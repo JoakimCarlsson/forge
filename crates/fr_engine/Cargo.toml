@@ -11,9 +11,19 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
-fr_core.workspace = true
+fr_math.workspace = true
+fr_color.workspace = true
+fr_time.workspace = true
+fr_transform.workspace = true
+fr_input.workspace = true
+fr_light.workspace = true
+fr_mesh.workspace = true
+fr_image.workspace = true
+fr_material.workspace = true
+fr_camera.workspace = true
+fr_skeleton.workspace = true
 fr_assets.workspace = true
+fr_physics.workspace = true
 fr_window.workspace = true
 fr_render.workspace = true
 fr_ui.workspace = true
-fr_physics.workspace = true

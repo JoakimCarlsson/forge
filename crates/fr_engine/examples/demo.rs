@@ -11,30 +11,27 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use fr_engine::assets::{
-    AlphaMode, ImageData, MaterialData, SamplerData, capsule, cube, plane, sphere,
-};
+use fr_engine::camera::{Camera, OrbitController};
+use fr_engine::image::{ImageData, SamplerData};
+use fr_engine::input::{ButtonState, PointerButton};
+use fr_engine::light::{DirectionalLight, PointLight, SpotLight};
+use fr_engine::material::{AlphaMode, MaterialData, MaterialId};
+use fr_engine::math::{Quat, Vec2, Vec3, Vec4};
+use fr_engine::mesh::{MeshId, capsule, cube, plane, sphere};
 use fr_engine::physics::body::{BodyDef, BodyId, BodyType};
 use fr_engine::physics::geometry::Geometry;
 use fr_engine::physics::math::Pose;
 use fr_engine::physics::ragdoll::{Ragdoll, RagdollDef};
 use fr_engine::physics::shape::{Material, ShapeDef};
 use fr_engine::physics::world::{World, WorldDef};
+use fr_engine::render::{AmbientLight, Model, Scene};
+use fr_engine::skeleton::Skeleton;
+use fr_engine::transform::Transform;
 use fr_engine::ui::{Div, Rgba, Styled, Theme, button, h_flex, switch, text, v_flex};
-use fr_engine::{
-    AmbientLight, App, Assets, ButtonState, Camera, DirectionalLight, FixedStep, Frame, Input,
-    LoadError, MaterialId, MeshId, Model, PointLight, PointerButton, Quat, Scene, Skeleton,
-    SpotLight, Transform, Vec2, Vec3, Vec4,
-};
+use fr_engine::{App, Assets, FixedStep, Frame, Input, LoadError};
 
 /// The sub-steps of every fixed step.
 const SUB_STEPS: usize = 4;
-
-/// Radians of orbit per pixel dragged.
-const ORBIT_SPEED: f32 = 0.005;
-
-/// How far one logical pixel of scrolling changes the zoom, as a fraction of the distance.
-const ZOOM_SPEED: f32 = 0.002;
 
 /// The width of the control panel, in logical pixels.
 const PANEL_WIDTH: f32 = 240.0;
@@ -62,9 +59,6 @@ const CAMERA_TARGET: Vec3 = Vec3::new(0.0, 1.0, 0.0);
 
 /// The number of bodies the pile starts with.
 const PILE_BODIES: usize = 9;
-
-/// The largest number of bodies the demo allows before spawning stops.
-const MAX_BODIES: usize = 400;
 
 /// What the controls of the panel send.
 #[derive(Clone, Copy, Debug)]
@@ -196,12 +190,8 @@ struct Demo {
     model_path: Option<PathBuf>,
     /// The loaded model.
     model: Option<Model>,
-    /// The orbit angle around the vertical axis, in radians.
-    yaw: f32,
-    /// The orbit angle above the ground, in radians.
-    pitch: f32,
-    /// The distance from the camera to its target.
-    distance: f32,
+    /// The orbit that places the camera.
+    orbit: OrbitController,
     /// The pointer position while the orbit button is held.
     drag_from: Option<(f32, f32)>,
     /// The latest pointer position.
@@ -210,6 +200,21 @@ struct Demo {
     scenery: Option<Scenery>,
     /// A line shown at the bottom of the panel.
     status: String,
+}
+
+/// The orbit the camera starts in and returns to.
+fn start_orbit() -> OrbitController {
+    OrbitController {
+        target: CAMERA_TARGET,
+        yaw: START_YAW,
+        pitch: START_PITCH,
+        distance: START_DISTANCE,
+        min_pitch: 0.05,
+        max_pitch: 1.5,
+        min_distance: 3.0,
+        max_distance: 60.0,
+        ..OrbitController::default()
+    }
 }
 
 /// A grey checkerboard image of 8-pixel squares, as sRGB colour.
@@ -347,9 +352,7 @@ impl Demo {
             fps: 0.0,
             model_path,
             model: None,
-            yaw: START_YAW,
-            pitch: START_PITCH,
-            distance: START_DISTANCE,
+            orbit: start_orbit(),
             drag_from: None,
             pointer: None,
             scenery: None,
@@ -421,10 +424,6 @@ impl Demo {
 
     /// Drops one ragdoll above the pile.
     fn spawn_ragdoll(&mut self) {
-        if self.world.stats().bodies >= MAX_BODIES {
-            self.status = String::from("body limit reached");
-            return;
-        }
         self.spawned += 1;
         let position = Vec3::new(
             self.random_in(-1.5, 1.5),
@@ -456,10 +455,6 @@ impl Demo {
 
     /// Drops one box above the pile.
     fn spawn_box(&mut self) {
-        if self.world.stats().bodies >= MAX_BODIES {
-            self.status = String::from("body limit reached");
-            return;
-        }
         let position = Vec3::new(
             self.random_in(-1.5, 1.5),
             self.random_in(5.0, 7.0),
@@ -478,16 +473,9 @@ impl Demo {
 
     /// The camera orbiting a point above the pile.
     fn camera(&self) -> Camera {
-        let offset = Vec3::new(
-            self.pitch.cos() * self.yaw.sin(),
-            self.pitch.sin(),
-            self.pitch.cos() * self.yaw.cos(),
-        );
-        Camera {
-            position: CAMERA_TARGET + offset * self.distance,
-            target: CAMERA_TARGET,
-            ..Camera::default()
-        }
+        let mut camera = Camera::default();
+        self.orbit.apply(&mut camera);
+        camera
     }
 
     /// Adds a row of display spheres along X at depth `z`, one per material.
@@ -680,9 +668,7 @@ impl App for Demo {
             Message::ToggleShadows => self.shadows = !self.shadows,
             Message::ToggleVsync => self.vsync = !self.vsync,
             Message::ResetCamera => {
-                self.yaw = START_YAW;
-                self.pitch = START_PITCH;
-                self.distance = START_DISTANCE;
+                self.orbit = start_orbit();
             }
         }
     }
@@ -692,8 +678,7 @@ impl App for Demo {
         match input {
             Input::PointerMoved { x, y } => {
                 if let Some((from_x, from_y)) = self.drag_from {
-                    self.yaw -= (x - from_x) * ORBIT_SPEED;
-                    self.pitch = (self.pitch + (y - from_y) * ORBIT_SPEED).clamp(0.05, 1.5);
+                    self.orbit.orbit(x - from_x, y - from_y);
                     self.drag_from = Some((*x, *y));
                 }
                 self.pointer = Some((*x, *y));
@@ -709,7 +694,7 @@ impl App for Demo {
                 };
             }
             Input::Scrolled(delta) => {
-                self.distance = (self.distance * (-delta.y * ZOOM_SPEED).exp()).clamp(3.0, 60.0);
+                self.orbit.zoom(delta.y);
             }
             Input::PointerButton { .. } | Input::Key(_) => {}
         }

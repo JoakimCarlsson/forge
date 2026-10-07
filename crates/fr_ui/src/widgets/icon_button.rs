@@ -1,6 +1,6 @@
 //! A square control carrying one icon.
 
-use fr_render::Rgba;
+use fr_color::Rgba;
 
 use crate::div::{Div, v_flex};
 use crate::icons::{IconName, IconSize, icon};

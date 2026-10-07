@@ -11,5 +11,6 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+fr_input.workspace = true
 raw-window-handle = "0.6.2"
 winit = "0.30.13"

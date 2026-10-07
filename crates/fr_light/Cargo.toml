@@ -1,0 +1,15 @@
+[package]
+name = "fr_light"
+description = "Punctual light types of the forge engine."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+fr_math.workspace = true
+fr_transform.workspace = true

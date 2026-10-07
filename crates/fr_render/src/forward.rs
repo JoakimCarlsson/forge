@@ -7,7 +7,8 @@
 
 use std::ops::Range;
 
-use fr_core::{MaterialId, MeshId};
+use fr_material::MaterialId;
+use fr_mesh::MeshId;
 
 use crate::resources::Resources;
 use crate::scene::Scene;

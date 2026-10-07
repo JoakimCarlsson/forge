@@ -6,10 +6,12 @@
 
 use std::ops::Range;
 
-use fr_core::{DirectionalLight, Light, Mat4, MeshId, Vec3, look_at, orthographic, perspective};
+use fr_camera::Camera;
+use fr_light::{DirectionalLight, Light};
+use fr_math::{Mat4, Vec3, look_at, orthographic, perspective};
+use fr_mesh::MeshId;
 
 use crate::resources::Resources;
-use crate::scene::Camera;
 use crate::uniforms::{LightSet, Vertex};
 
 /// The number of cascades the sun's shadow is split into.
@@ -108,10 +110,10 @@ pub(crate) fn plan_shadows(camera: &Camera, aspect: f32, lights: &LightSet) -> S
 
 /// Fits `CASCADES` orthographic maps to slices of the camera's frustum.
 fn fit_cascades(camera: &Camera, aspect: f32, light: &DirectionalLight) -> CascadeFit {
-    let near = camera.near.max(1e-3);
+    let near = camera.projection.near().max(1e-3);
     let far = light
         .shadow_distance
-        .clamp(near * 2.0, camera.far.max(near * 2.0));
+        .clamp(near * 2.0, camera.projection.far().max(near * 2.0));
     let view = camera.view();
     let direction = light.direction.try_normalize().unwrap_or(Vec3::NEG_Y);
     let up = if direction.dot(Vec3::Y).abs() > 0.99 {
@@ -144,8 +146,7 @@ fn fit_cascades(camera: &Camera, aspect: f32, light: &DirectionalLight) -> Casca
 
 /// The world-space corners of the camera's frustum between `near` and `far`.
 fn slice_corners(camera: &Camera, aspect: f32, view: &Mat4, near: f32, far: f32) -> [Vec3; 8] {
-    let inverse =
-        (perspective(camera.fov_y, aspect.max(f32::EPSILON), near, far) * *view).inverse();
+    let inverse = (camera.projection.with_clip(near, far).matrix(aspect) * *view).inverse();
     std::array::from_fn(|index| {
         let ndc = Vec3::new(
             if index & 1 == 0 { -1.0 } else { 1.0 },

@@ -1,7 +1,7 @@
 //! The distance joint: keeps two anchors at a length, as a rigid rod or a spring, with optional
 //! limits and a motor.
 
-use fr_core::Vec3;
+use fr_math::Vec3;
 
 use crate::joint::JointSim;
 use crate::math::{Softness, mul_add, mul_sub, normalize};

@@ -3,9 +3,8 @@
 
 use std::collections::HashSet;
 
-use fr_core::{Quat, Vec3};
+use fr_math::{Quat, Vec3};
 
-use crate::aabb::Aabb;
 use crate::body::{Body, BodyDef, BodyId, BodyTag, BodyType};
 use crate::broad_phase::BroadPhase;
 use crate::constants::{CONTACT_RECYCLE_DISTANCE, SPECULATIVE_DISTANCE};
@@ -17,6 +16,7 @@ use crate::math::Pose;
 use crate::shape::{Filter, Material, Shape, ShapeDef, ShapeId, ShapeTag};
 use crate::slot::SlotMap;
 use crate::solver::StepContext;
+use fr_math::Aabb;
 
 /// The settings of a world.
 #[derive(Clone, Copy, Debug)]

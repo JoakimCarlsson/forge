@@ -23,7 +23,8 @@ pub use div::{Div, div, h_flex, v_flex};
 pub use element::{
     Element, Input, Interaction, IntoElement, LayoutContext, PaintContext, Region, RegionAction,
 };
-pub use fr_render::{Point, Rect, Rgba, Size};
+pub use fr_color::Rgba;
+pub use fr_math::{Point, Rect, Size};
 pub use icons::{Icon, IconName, IconSize, icon};
 pub use style::{Align, Axis, Edges, Justify, Length, STEP, Side, Style, Styled, space};
 pub use text::{Text, text};

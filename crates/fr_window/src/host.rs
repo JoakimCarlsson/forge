@@ -12,7 +12,9 @@ use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::window::{WindowAttributes, WindowId};
 
-use crate::input::{ButtonState, Key, KeyEvent, Modifiers, PointerButton, ScrollDelta};
+use fr_input::{ButtonState, KeyEvent, Modifiers};
+
+use crate::convert;
 use crate::{WindowConfig, WindowHandler};
 
 /// A failure to create the event loop, the window, or to run the loop.
@@ -151,14 +153,14 @@ impl<H: WindowHandler> ApplicationHandler for Host<H> {
             }
             WindowEvent::CursorLeft { .. } => self.handler.pointer_left(),
             WindowEvent::MouseInput { state, button, .. } => self.handler.pointer_button(
-                PointerButton::from_winit(button),
-                ButtonState::from_winit(state),
+                convert::pointer_button(button),
+                convert::button_state(state),
             ),
             WindowEvent::MouseWheel { delta, .. } => self
                 .handler
-                .scrolled(ScrollDelta::from_winit(delta, self.scale_factor)),
+                .scrolled(convert::scroll_delta(delta, self.scale_factor)),
             WindowEvent::ModifiersChanged(modifiers) => {
-                self.modifiers = Modifiers::from_winit(modifiers.state());
+                self.modifiers = convert::modifiers(modifiers.state());
             }
             WindowEvent::KeyboardInput { event, .. } => self.forward_key(&event),
             _ => {}
@@ -169,9 +171,9 @@ impl<H: WindowHandler> ApplicationHandler for Host<H> {
 impl<H: WindowHandler> Host<H> {
     /// Hands a keyboard event to the handler, followed by the text it produced.
     fn forward_key(&mut self, event: &winit::event::KeyEvent) {
-        let state = ButtonState::from_winit(event.state);
+        let state = convert::button_state(event.state);
         self.handler.key(&KeyEvent {
-            key: Key::from_winit(&event.logical_key),
+            key: convert::key(&event.logical_key),
             state,
             repeat: event.repeat,
             modifiers: self.modifiers,

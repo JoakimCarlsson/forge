@@ -1,7 +1,7 @@
 //! The spherical joint: a point to point constraint with optional cone and twist limits, a
 //! rotation spring towards a target and a motor.
 
-use fr_core::{Mat3, Quat, Vec3};
+use fr_math::{Mat3, Quat, Vec3};
 
 use crate::joint::JointSim;
 use crate::math::{

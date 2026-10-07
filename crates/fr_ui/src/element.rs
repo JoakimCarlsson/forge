@@ -8,7 +8,9 @@
 
 use std::sync::Arc;
 
-use fr_render::{DrawList, FontStyle, Point, Quad, Rect, Rgba, ShapedRun, Size, Svg, TextSystem};
+use fr_color::Rgba;
+use fr_math::{Point, Rect, Size};
+use fr_render::{DrawList, FontStyle, Quad, ShapedRun, Svg, TextSystem};
 
 use crate::style::Style;
 use crate::theme::Theme;

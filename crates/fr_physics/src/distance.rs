@@ -1,6 +1,6 @@
 //! The GJK distance between convex point clouds, and distances between segments and lines.
 
-use fr_core::Vec3;
+use fr_math::Vec3;
 
 use crate::geometry::ShapeProxy;
 use crate::math::{Pose, mul_add, normalize};

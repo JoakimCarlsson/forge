@@ -1,7 +1,8 @@
 //! The handler trait the event loop drives.
 
+use fr_input::{ButtonState, KeyEvent, PointerButton, ScrollDelta};
+
 use crate::Window;
-use crate::input::{ButtonState, KeyEvent, PointerButton, ScrollDelta};
 
 /// Receives the window's lifecycle and input, and drives a frame per redraw.
 ///

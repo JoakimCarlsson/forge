@@ -1,6 +1,6 @@
 [package]
 name = "fr_assets"
-description = "CPU-side asset data and importers of the forge engine."
+description = "Asset importers of the forge engine: glTF models and skeletons."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,5 +11,11 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
-fr_core.workspace = true
+fr_math.workspace = true
+fr_transform.workspace = true
+fr_light.workspace = true
+fr_mesh.workspace = true
+fr_image.workspace = true
+fr_material.workspace = true
+fr_skeleton.workspace = true
 gltf = { version = "1.4.1", features = ["KHR_lights_punctual", "KHR_materials_emissive_strength"] }

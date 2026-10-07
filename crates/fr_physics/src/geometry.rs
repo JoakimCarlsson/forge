@@ -4,14 +4,14 @@
 use std::f32::consts::PI;
 use std::sync::Arc;
 
-use fr_core::{Mat3, Quat, Vec3};
+use fr_math::{Mat3, Quat, Vec3};
 
-use crate::aabb::Aabb;
 use crate::constants::LINEAR_SLOP;
 use crate::hull::Hull;
 use crate::math::{
-    Pose, abs, cylinder_inertia, length_and_normalize, rotate_inertia, sphere_inertia, steiner,
+    Pose, cylinder_inertia, length_and_normalize, rotate_inertia, sphere_inertia, steiner,
 };
+use fr_math::Aabb;
 
 /// A ball.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -193,20 +193,20 @@ impl Geometry {
         match self {
             Self::Sphere(sphere) => Extent {
                 min: sphere.radius,
-                max: abs(sphere.center - origin) + Vec3::splat(sphere.radius),
+                max: (sphere.center - origin).abs() + Vec3::splat(sphere.radius),
             },
             Self::Capsule(capsule) => {
                 let c1 = capsule.center1() - origin;
                 let c2 = capsule.center2() - origin;
                 Extent {
                     min: capsule.radius,
-                    max: abs(c1).max(abs(c2)) + Vec3::splat(capsule.radius),
+                    max: c1.abs().max(c2.abs()) + Vec3::splat(capsule.radius),
                 }
             }
             Self::Hull(hull) => {
                 let mut max = Vec3::ZERO;
                 for &point in hull.points() {
-                    max = max.max(abs(point - origin));
+                    max = max.max((point - origin).abs());
                 }
                 Extent {
                     min: hull.inner_radius(),

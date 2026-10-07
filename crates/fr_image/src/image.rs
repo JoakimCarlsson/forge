@@ -1,5 +1,10 @@
 //! Pixels and the sampling state a texture is read with.
 
+use fr_handle::Handle;
+
+/// A texture uploaded to the renderer.
+pub type TextureId = Handle<TextureData>;
+
 /// A decoded image, always four 8-bit channels per pixel.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ImageData {

@@ -1,9 +1,11 @@
 //! The byte layouts the 3D shaders read, mirrored from `common.wgsl` and `mesh.wgsl`.
 
-use fr_assets::{AlphaMode, MaterialData};
-use fr_core::{DirectionalLight, Light, Mat4, Vec3};
+use fr_camera::Camera;
+use fr_light::{DirectionalLight, Light};
+use fr_material::{AlphaMode, MaterialData};
+use fr_math::{Mat4, Vec3};
 
-use crate::scene::{AmbientLight, Camera};
+use crate::scene::AmbientLight;
 use crate::shadows::{CASCADES, LOCAL_LAYERS, LocalShadow, ShadowPlan};
 
 /// How many directional lights the shaders shade with.
@@ -27,7 +29,7 @@ pub(crate) struct CameraUniform {
 impl CameraUniform {
     /// The uniform for `camera` seen through a viewport of `aspect` width over height.
     pub(crate) fn new(camera: &Camera, aspect: f32) -> Self {
-        let view_proj = camera.projection(aspect) * camera.view();
+        let view_proj = camera.view_projection(aspect);
         let forward = (camera.target - camera.position).normalize_or(Vec3::NEG_Z);
         Self {
             view_proj: view_proj.to_cols_array_2d(),

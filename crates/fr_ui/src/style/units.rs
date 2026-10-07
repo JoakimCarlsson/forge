@@ -4,7 +4,7 @@
 //! chosen independently still line up. Four logical pixels a step, as Tailwind
 //! has it: `p(4)` is sixteen pixels, exactly as `p-4` is there.
 
-use fr_render::Size;
+use fr_math::Size;
 
 /// Logical pixels in one step of the spacing scale.
 pub const STEP: f32 = 4.0;

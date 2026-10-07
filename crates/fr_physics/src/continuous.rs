@@ -5,7 +5,7 @@
 //! shapes of the body, move the body back to it, give back the lost gravity), but replaces the
 //! root finding time of impact with conservative advancement over GJK distances.
 
-use fr_core::{Quat, Vec3};
+use fr_math::{Quat, Vec3};
 
 use crate::body::{BodyId, BodyType};
 use crate::constants::LINEAR_SLOP;

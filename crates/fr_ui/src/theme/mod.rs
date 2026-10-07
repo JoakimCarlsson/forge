@@ -19,7 +19,7 @@ pub use radii::Radii;
 pub use sizes::Sizes;
 pub use text::{Font, TextScale, TextSize};
 
-use fr_render::Rgba;
+use fr_color::Rgba;
 
 /// The tokens a frame is drawn from.
 #[derive(Clone, Copy, Debug)]

@@ -9,8 +9,10 @@ use std::f32::consts::PI;
 use std::fmt;
 use std::sync::Arc;
 
-use fr_core::humanoid as bone;
-use fr_core::{Quat, Skeleton, Transform, Vec3};
+use fr_math::{Quat, Vec3};
+use fr_skeleton::Skeleton;
+use fr_skeleton::humanoid as bone;
+use fr_transform::Transform;
 
 use crate::body::{BodyDef, BodyId};
 use crate::geometry::{Capsule, Geometry};
@@ -326,7 +328,7 @@ impl Ragdoll {
     ///
     /// # Errors
     ///
-    /// Returns [`RagdollError`] when the skeleton lacks a bone of [`fr_core::humanoid`].
+    /// Returns [`RagdollError`] when the skeleton lacks a bone of [`fr_skeleton::humanoid`].
     pub fn build(
         world: &mut World,
         skeleton: &Skeleton,

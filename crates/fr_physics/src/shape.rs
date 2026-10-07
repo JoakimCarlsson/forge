@@ -1,14 +1,14 @@
 //! Colliders: a geometry on a body with a material, a collision filter and an optional sensor
 //! flag.
 
-use fr_core::Vec3;
+use fr_math::Vec3;
 
-use crate::aabb::Aabb;
 use crate::body::BodyId;
 use crate::constants::{AABB_MARGIN_FRACTION, MAX_AABB_MARGIN};
 use crate::geometry::Geometry;
 use crate::slot::Handle;
 use crate::tree::NodeId;
+use fr_math::Aabb;
 
 /// Marks [`ShapeId`].
 #[derive(Clone, Copy, Debug)]

@@ -1,55 +1,11 @@
 //! The description of one 3D frame: a camera, lights and mesh instances.
 
-use fr_core::{Light, Mat4, MaterialId, MeshId, Transform, Vec3, look_at, perspective};
-
-/// The default vertical field of view, in radians.
-const DEFAULT_FOV_Y: f32 = std::f32::consts::FRAC_PI_3;
-
-/// A perspective camera looking from a position at a target.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Camera {
-    /// Where the camera is, in world space.
-    pub position: Vec3,
-    /// The point the camera looks at.
-    pub target: Vec3,
-    /// The direction that is up on screen.
-    pub up: Vec3,
-    /// The vertical field of view in radians.
-    pub fov_y: f32,
-    /// The distance to the near clip plane.
-    pub near: f32,
-    /// The distance to the far clip plane.
-    pub far: f32,
-    /// The multiplier applied to scene radiance before tonemapping.
-    pub exposure: f32,
-}
-
-impl Camera {
-    /// The matrix taking world space into the camera's view space.
-    pub fn view(&self) -> Mat4 {
-        look_at(self.position, self.target, self.up)
-    }
-
-    /// The matrix taking view space into clip space for a viewport of `aspect` width over height.
-    pub fn projection(&self, aspect: f32) -> Mat4 {
-        perspective(self.fov_y, aspect.max(f32::EPSILON), self.near, self.far)
-    }
-}
-
-impl Default for Camera {
-    /// A camera five units back on Z, looking at the origin with a 60 degree field of view.
-    fn default() -> Self {
-        Self {
-            position: Vec3::new(0.0, 0.0, 5.0),
-            target: Vec3::ZERO,
-            up: Vec3::Y,
-            fov_y: DEFAULT_FOV_Y,
-            near: 0.05,
-            far: 500.0,
-            exposure: 1.0,
-        }
-    }
-}
+use fr_camera::Camera;
+use fr_light::Light;
+use fr_material::MaterialId;
+use fr_math::Vec3;
+use fr_mesh::MeshId;
+use fr_transform::Transform;
 
 /// Light that reaches every surface from the sky and the ground: a procedural
 /// hemisphere gradient, lit from above by the sky colour and from below by the

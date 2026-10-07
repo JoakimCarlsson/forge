@@ -2,7 +2,7 @@
 
 use std::f32::consts::{PI, TAU};
 
-use fr_core::{Vec2, Vec3};
+use fr_math::{Vec2, Vec3};
 
 use crate::mesh::MeshData;
 

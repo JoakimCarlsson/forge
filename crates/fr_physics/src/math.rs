@@ -6,7 +6,8 @@
 
 use std::f32::consts::PI;
 
-use fr_core::{Mat3, Quat, Transform, Vec3};
+use fr_math::{Mat3, Quat, Vec3};
+use fr_transform::Transform;
 
 /// A rigid transform: a rotation followed by a translation.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -106,30 +107,6 @@ impl Default for Pose {
     }
 }
 
-/// A plane with unit `normal` through the points `p` with `dot(normal, p) == offset`.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Plane {
-    /// The unit normal.
-    pub normal: Vec3,
-    /// The signed distance of the plane from the origin along the normal.
-    pub offset: f32,
-}
-
-impl Plane {
-    /// The plane with unit `normal` through `point`.
-    pub fn from_normal_and_point(normal: Vec3, point: Vec3) -> Self {
-        Self {
-            normal,
-            offset: normal.dot(point),
-        }
-    }
-
-    /// The signed distance of `point` in front of the plane.
-    pub fn separation(&self, point: Vec3) -> f32 {
-        self.normal.dot(point) - self.offset
-    }
-}
-
 /// The coefficients of a soft constraint, from a spring frequency and damping ratio.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Softness {
@@ -214,11 +191,6 @@ pub fn arbitrary_perp(v: Vec3) -> Vec3 {
         Vec3::new(a * v.z, b * v.z, -a * v.x - b * v.y)
     };
     normalize(p)
-}
-
-/// The vector `v` of the rotated frame of `q` in the parent frame.
-pub fn rotate(q: Quat, v: Vec3) -> Vec3 {
-    q * v
 }
 
 /// The vector `v` of the parent frame in the rotated frame of `q`.
@@ -438,11 +410,6 @@ pub fn cylinder_inertia(mass: f32, radius: f32, height: f32) -> Mat3 {
     diagonal(ixx, iyy, ixx)
 }
 
-/// The component-wise absolute value.
-pub fn abs(v: Vec3) -> Vec3 {
-    Vec3::new(v.x.abs(), v.y.abs(), v.z.abs())
-}
-
 /// The velocity of the point at offset `r` of a body moving with `v` and turning with `w`.
 pub fn point_velocity(v: Vec3, w: Vec3, r: Vec3) -> Vec3 {
     v + w.cross(r)
@@ -456,9 +423,4 @@ pub fn mul_add(a: Vec3, s: f32, b: Vec3) -> Vec3 {
 /// `a - s * b` evaluated as a multiply then a subtract.
 pub fn mul_sub(a: Vec3, s: f32, b: Vec3) -> Vec3 {
     Vec3::new(a.x - s * b.x, a.y - s * b.y, a.z - s * b.z)
-}
-
-/// Whether every component of `v` is finite.
-pub fn is_valid(v: Vec3) -> bool {
-    v.x.is_finite() && v.y.is_finite() && v.z.is_finite()
 }

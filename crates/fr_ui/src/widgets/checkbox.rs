@@ -1,6 +1,8 @@
 //! A box that is ticked, empty, or neither.
 
-use fr_render::{Quad, Rect, Rgba, Size};
+use fr_color::Rgba;
+use fr_math::{Rect, Size};
+use fr_render::Quad;
 
 use crate::element::{Element, Interaction, LayoutContext, PaintContext};
 use crate::icons::{IconName, IconSize};

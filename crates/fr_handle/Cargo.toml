@@ -1,6 +1,6 @@
 [package]
-name = "fr_core"
-description = "Frame timing and shared value types of the forge engine."
+name = "fr_handle"
+description = "Typed index handles of the forge engine."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,4 +11,3 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
-glam = { version = "0.34.1", features = ["bytemuck"] }

@@ -1,7 +1,8 @@
 //! The GPU-side tables behind [`MeshId`], [`MaterialId`] and [`TextureId`].
 
-use fr_assets::{Filter, ImageData, MaterialData, MeshData, SamplerData, Wrap};
-use fr_core::{MaterialId, MeshId, TextureId};
+use fr_image::{Filter, ImageData, SamplerData, TextureId, Wrap};
+use fr_material::{AlphaMode, MaterialData, MaterialId};
+use fr_mesh::{MeshData, MeshId};
 use wgpu::util::DeviceExt;
 
 use crate::error::RenderError;
@@ -237,7 +238,7 @@ impl Resources {
         });
         self.materials.push(GpuMaterial {
             group,
-            blend: matches!(material.alpha_mode, fr_assets::AlphaMode::Blend),
+            blend: matches!(material.alpha_mode, AlphaMode::Blend),
             double_sided: material.double_sided,
         });
         Ok(MaterialId::from_index(self.materials.len() as u32 - 1))

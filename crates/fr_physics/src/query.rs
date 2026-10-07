@@ -1,12 +1,12 @@
 //! Spatial queries: ray casts and bounds overlaps.
 
-use fr_core::Vec3;
+use fr_math::{Ray3d, Vec3};
 
-use crate::aabb::Aabb;
 use crate::body::BodyId;
 use crate::math::normalize;
 use crate::shape::ShapeId;
 use crate::world::World;
+use fr_math::Aabb;
 
 /// Which shapes a query considers: a shape is considered when the query mask accepts its
 /// category and its mask accepts the query category.
@@ -44,10 +44,35 @@ pub struct RayHit {
 }
 
 impl World {
+    /// Casts `ray` up to `max_distance` and calls `callback` with each hit, whose fraction is the
+    /// distance over `max_distance`. The callback returns the fraction to continue with: the hit
+    /// fraction to keep only closer hits, one to see every hit, or zero to stop.
+    pub fn cast_ray<F>(&self, ray: &Ray3d, max_distance: f32, filter: &QueryFilter, callback: F)
+    where
+        F: FnMut(&RayHit) -> f32,
+    {
+        self.cast_segment(
+            ray.origin,
+            ray.direction.as_vec3() * max_distance,
+            filter,
+            callback,
+        );
+    }
+
+    /// The closest hit of `ray` within `max_distance`.
+    pub fn cast_ray_closest(
+        &self,
+        ray: &Ray3d,
+        max_distance: f32,
+        filter: &QueryFilter,
+    ) -> Option<RayHit> {
+        self.cast_segment_closest(ray.origin, ray.direction.as_vec3() * max_distance, filter)
+    }
+
     /// Casts a segment from `origin` along `translation` and calls `callback` with each hit.
     /// The callback returns the fraction to continue with: the hit fraction to keep only closer
     /// hits, one to see every hit, or zero to stop.
-    pub fn cast_ray<F>(
+    fn cast_segment<F>(
         &self,
         origin: Vec3,
         translation: Vec3,
@@ -93,14 +118,14 @@ impl World {
     }
 
     /// The closest hit of a segment against the world.
-    pub fn cast_ray_closest(
+    fn cast_segment_closest(
         &self,
         origin: Vec3,
         translation: Vec3,
         filter: &QueryFilter,
     ) -> Option<RayHit> {
         let mut closest = None;
-        self.cast_ray(origin, translation, filter, |hit| {
+        self.cast_segment(origin, translation, filter, |hit| {
             closest = Some(*hit);
             hit.fraction
         });

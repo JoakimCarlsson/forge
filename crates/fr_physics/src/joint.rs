@@ -9,7 +9,7 @@ mod revolute;
 mod spherical;
 mod weld;
 
-use fr_core::{Mat3, Vec3};
+use fr_math::{Mat3, Vec3};
 
 use crate::body::{Body, BodyId, BodyType};
 use crate::island::IslandId;

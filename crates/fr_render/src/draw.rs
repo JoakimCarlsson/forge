@@ -2,10 +2,10 @@
 
 use std::sync::Arc;
 
-use crate::color::Rgba;
-use crate::geometry::{Point, Rect, Size};
 use crate::svg::Svg;
 use crate::text::ShapedRun;
+use fr_color::Rgba;
+use fr_math::{Point, Rect, Size};
 
 /// A rounded, optionally bordered rectangle.
 #[derive(Clone, Copy, Debug)]
