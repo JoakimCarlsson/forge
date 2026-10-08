@@ -2,11 +2,17 @@
 
 A general-purpose Rust game engine built on winit and wgpu. See [AGENTS.md](AGENTS.md) for the layout and rules.
 
+The workspace contains reusable engine crates and a headless API example. Playable games are separate Cargo projects that depend on `fr_engine`; game scenes, controls and UI do not live in this repository.
+
 ```sh
-make run
+make build
+make lint
+make run  # Launch the standalone game in ../../forge/demo
+make debug  # Launch the standalone game in debug
+make scene  # Run the headless scene serialization example
 ```
 
-The demo: lit PBR scene with shadows, optional glTF (`make run ARGS=path/to/model.glb`), and one ragdoll simulated by `fr_physics`. Hold the right mouse button to look around and fly (W A S D, E or space up, Q or ctrl down, shift faster, wheel for speed); press the left button on the ragdoll to grab and drag it, with the wheel moving it towards or away from you. The panel resets the ragdoll and sets the strength, damping and torque limit of its joint motors.
+`run` and `debug` delegate to the game's own Makefile; override its location with `GAME=/path/to/game`. The game remains outside this repository and outside the engine workspace. `ARGS` passes arguments to the game.
 
 `fr_physics` is a Rust port of the soft step solver of Box3D: spheres, capsules and boxes (convex hulls), speculative contacts with warm starting, relaxation and restitution, a dynamic AABB tree, islands with sleeping, continuous collision against static shapes, spherical, revolute, weld, distance and mouse joints, sensors, ray casts, joint motors (torque limited springs towards a target pose) and data driven rigs built on a transform hierarchy, with a humanoid template. It is scalar and single threaded, and deterministic bit for bit.
 

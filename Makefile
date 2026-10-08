@@ -1,13 +1,16 @@
-EXAMPLE ?= demo
+GAME ?= $(abspath ../../forge/demo)
 ARGS ?=
 
-.PHONY: run debug build fmt lint test clean
+.PHONY: run debug scene build fmt lint test clean
 
 run:
-	cargo run --release -p fr_engine --example $(EXAMPLE) -- $(ARGS)
+	$(MAKE) -C "$(GAME)" run ARGS="$(ARGS)"
 
 debug:
-	cargo run -p fr_engine --example $(EXAMPLE) -- $(ARGS)
+	$(MAKE) -C "$(GAME)" debug ARGS="$(ARGS)"
+
+scene:
+	cargo run --release -p fr_engine --example scene
 
 build:
 	cargo build --workspace --all-targets
