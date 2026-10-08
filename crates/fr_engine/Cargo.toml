@@ -1,6 +1,6 @@
 [package]
 name = "fr_engine"
-description = "The crate a game depends on: the App trait and the run entry point."
+description = "The crate a game depends on: the ECS application builder and the run entry point."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -26,3 +26,5 @@ fr_physics.workspace = true
 fr_window.workspace = true
 fr_render.workspace = true
 fr_ui.workspace = true
+fr_app.workspace = true
+fr_scene.workspace = true

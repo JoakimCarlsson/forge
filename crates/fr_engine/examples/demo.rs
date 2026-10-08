@@ -78,7 +78,15 @@ mod game {
 
     use std::path::PathBuf;
 
+    use fr_engine::app::{FixedUpdate, PreUpdate, Startup, Update};
     use fr_engine::camera::{Camera, FlyController, Viewport};
+    use fr_engine::ecs::{
+        self as bevy_ecs,
+        resource::Resource,
+        schedule::IntoScheduleConfigs,
+        system::{Commands, Res, ResMut},
+        world::World as EcsWorld,
+    };
     use fr_engine::input::{ButtonState, CursorMode, PointerButton};
     use fr_engine::light::{DirectionalLight, PointLight, SpotLight};
     use fr_engine::math::{Plane, Quat, Ray3d, Vec2, Vec3};
@@ -92,10 +100,14 @@ mod game {
     };
     use fr_engine::physics::shape::ShapeDef;
     use fr_engine::physics::world::{World, WorldDef};
-    use fr_engine::render::{AmbientLight, Model, Scene};
+    use fr_engine::render::{AmbientLight, Scene};
+    use fr_engine::scene::{AssetPath, LocalTransform, ModelRef, Name, SceneId};
     use fr_engine::transform::{Hierarchy, Transform};
     use fr_engine::ui::{Div, Rgba, Theme};
-    use fr_engine::{App, Assets, FixedStep, Frame, Input};
+    use fr_engine::{
+        App, AppFailure, Assets, Extract, FixedStep, Frame, Input, Inputs, LoadError, MeshRenderer,
+        Plugin, RenderScene, RenderSystems, Runtime, UiMessages, WindowSettings,
+    };
 
     use crate::controls::Controls;
     use crate::message::Message;
@@ -162,6 +174,7 @@ mod game {
     }
 
     /// What the panel shows and the state the controls change.
+    #[derive(Resource)]
     pub struct Demo {
         /// The physics world.
         pub(crate) world: World,
@@ -185,8 +198,6 @@ mod game {
         pub(crate) fps: f32,
         /// The path of the model given on the command line.
         model_path: Option<PathBuf>,
-        /// The loaded model.
-        model: Option<Model>,
         /// The flying camera.
         fly: FlyController,
         /// The movement keys that are down.
@@ -229,7 +240,6 @@ mod game {
                 vsync: false,
                 fps: 0.0,
                 model_path,
-                model: None,
                 fly: FlyController::looking_at(CAMERA_START, CAMERA_TARGET),
                 controls: Controls::default(),
                 looking: false,
@@ -487,24 +497,14 @@ mod game {
         }
     }
 
-    impl App for Demo {
-        type Message = Message;
-
+    impl Demo {
         /// Uploads the primitives, the materials and the model named on the command line.
-        fn init(&mut self, assets: &mut Assets) {
-            match build_scenery(assets, &self.hierarchy, &self.rig_def) {
-                Ok(scenery) => self.scenery = Some(scenery),
-                Err(error) => self.status = format!("scene failed: {error}"),
+        fn init(&mut self, assets: &mut Assets) -> Result<(), LoadError> {
+            self.scenery = Some(build_scenery(assets, &self.hierarchy, &self.rig_def)?);
+            if let Some(path) = &self.model_path {
+                assets.load_gltf(path)?;
             }
-            if let Some(path) = self.model_path.clone() {
-                match assets.load_gltf(&path) {
-                    Ok(model) => self.model = Some(model),
-                    Err(error) => {
-                        eprintln!("forge demo: {error}");
-                        self.status = format!("model failed: {error}");
-                    }
-                }
-            }
+            Ok(())
         }
 
         /// Steps the physics world at the fixed rate, pulling a grabbed body towards its target.
@@ -637,13 +637,6 @@ mod game {
             let Some(scenery) = &self.scenery else {
                 return;
             };
-            scene.add(scenery.ground, scenery.ground_material, Transform::IDENTITY);
-            if let Some(model) = &self.model {
-                scene.add_model(
-                    model,
-                    Transform::from_translation(Vec3::new(0.0, 0.0, -10.0)),
-                );
-            }
             if let Some(ragdoll) = &self.ragdoll {
                 for body in ragdoll.bodies() {
                     self.add_body(scene, scenery, body);
@@ -663,6 +656,103 @@ mod game {
         fn view(&self, theme: &Theme) -> Div<Message> {
             panel::panel(self, theme)
         }
+    }
+    /// Composes the demo's simulation, input and extraction systems.
+    struct DemoPlugin;
+
+    impl Plugin for DemoPlugin {
+        /// Installs the demo systems into the engine's execution stages.
+        fn build(&self, app: &mut Runtime) {
+            app.add_systems(Startup, initialize)
+                .add_systems(PreUpdate, handle_controls)
+                .add_systems(FixedUpdate, simulate)
+                .add_systems(Update, update_demo)
+                .add_systems(Extract, draw_demo.after(RenderSystems::Extract));
+        }
+    }
+
+    /// Creates the ECS application and installs the demo plugin.
+    pub fn app(demo: Demo) -> App<Message> {
+        let mut app = App::new();
+        app.insert_resource(demo)
+            .add_plugins(DemoPlugin)
+            .set_view(view, clear_color);
+
+        app
+    }
+
+    /// Loads CPU assets and spawns persistent scenery objects.
+    fn initialize(
+        mut demo: ResMut<Demo>,
+        mut assets: ResMut<Assets>,
+        mut commands: Commands,
+        mut failure: ResMut<AppFailure>,
+    ) {
+        if let Err(error) = demo.init(&mut assets) {
+            failure.0 = Some(error.to_string());
+            return;
+        }
+        if let Some(scenery) = &demo.scenery {
+            commands.spawn((
+                SceneId::new(),
+                Name(String::from("Ground")),
+                LocalTransform::default(),
+                MeshRenderer {
+                    mesh: scenery.ground,
+                    material: scenery.ground_material,
+                },
+            ));
+        }
+        if let Some(path) = &demo.model_path {
+            commands.spawn((
+                SceneId::new(),
+                Name(String::from("Model")),
+                LocalTransform::new(Transform::from_translation(Vec3::new(0.0, 0.0, -10.0))),
+                ModelRef(AssetPath(path.to_string_lossy().into_owned())),
+            ));
+        }
+    }
+
+    /// Applies buffered controls before the fixed simulation steps.
+    fn handle_controls(
+        mut demo: ResMut<Demo>,
+        inputs: Res<Inputs>,
+        messages: Res<UiMessages<Message>>,
+        mut settings: ResMut<WindowSettings>,
+    ) {
+        for message in &messages.0 {
+            demo.message(*message);
+        }
+        for input in &inputs.0 {
+            demo.input(input);
+        }
+        settings.vsync = demo.vsync();
+        settings.cursor_mode = demo.cursor_mode();
+    }
+
+    /// Advances the demo's deterministic physics world once.
+    fn simulate(mut demo: ResMut<Demo>, step: Res<FixedStep>) {
+        demo.fixed_update(&step);
+    }
+
+    /// Updates camera movement and frame-dependent presentation state.
+    fn update_demo(mut demo: ResMut<Demo>, frame: Res<Frame>) {
+        demo.update(&frame);
+    }
+
+    /// Adds dynamic ragdoll and grab geometry after authored scenery extraction.
+    fn draw_demo(demo: Res<Demo>, mut scene: ResMut<RenderScene>) {
+        demo.scene(&mut scene.0);
+    }
+
+    /// Builds the demo's UI from ECS resources.
+    fn view(world: &EcsWorld, theme: &Theme) -> Div<Message> {
+        world.resource::<Demo>().view(theme)
+    }
+
+    /// Selects the demo's clear colour from ECS resources.
+    fn clear_color(world: &EcsWorld, theme: &Theme) -> Rgba {
+        world.resource::<Demo>().clear_color(theme)
     }
 }
 mod message {
@@ -952,7 +1042,7 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    match fr_engine::run(WINDOW_TITLE, demo) {
+    match fr_engine::run(WINDOW_TITLE, game::app(demo)) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             eprintln!("forge demo: {error}");

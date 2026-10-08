@@ -51,11 +51,11 @@ pub(crate) struct Resources {
     /// A flat tangent-space normal, read where a material has no normal texture.
     flat_normal: GpuTexture,
     /// The meshes, indexed by [`MeshId`].
-    meshes: Vec<GpuMesh>,
+    meshes: Vec<Option<GpuMesh>>,
     /// The materials, indexed by [`MaterialId`].
-    materials: Vec<GpuMaterial>,
+    materials: Vec<Option<GpuMaterial>>,
     /// The textures, indexed by [`TextureId`].
-    textures: Vec<GpuTexture>,
+    textures: Vec<Option<GpuTexture>>,
 }
 
 impl Resources {
@@ -91,12 +91,33 @@ impl Resources {
 
     /// The mesh behind `id`, if it exists.
     pub(crate) fn mesh(&self, id: MeshId) -> Option<&GpuMesh> {
-        self.meshes.get(id.index())
+        self.meshes.get(id.index()).and_then(Option::as_ref)
     }
 
     /// The material behind `id`, if it exists.
     pub(crate) fn material(&self, id: MaterialId) -> Option<&GpuMaterial> {
-        self.materials.get(id.index())
+        self.materials.get(id.index()).and_then(Option::as_ref)
+    }
+
+    /// Releases the GPU buffers of a mesh without reusing its handle.
+    pub(crate) fn remove_mesh(&mut self, id: MeshId) {
+        if let Some(slot) = self.meshes.get_mut(id.index()) {
+            *slot = None;
+        }
+    }
+
+    /// Releases a material's bind group without reusing its handle.
+    pub(crate) fn remove_material(&mut self, id: MaterialId) {
+        if let Some(slot) = self.materials.get_mut(id.index()) {
+            *slot = None;
+        }
+    }
+
+    /// Releases a texture view and sampler without reusing its handle.
+    pub(crate) fn remove_texture(&mut self, id: TextureId) {
+        if let Some(slot) = self.textures.get_mut(id.index()) {
+            *slot = None;
+        }
     }
 
     /// Uploads `image` as a texture sampled with `sampler`.
@@ -136,7 +157,7 @@ impl Resources {
             srgb,
             "texture",
         );
-        self.textures.push(texture);
+        self.textures.push(Some(texture));
         Ok(TextureId::from_index(self.textures.len() as u32 - 1))
     }
 
@@ -166,7 +187,7 @@ impl Resources {
                 usage,
             })
         };
-        self.meshes.push(GpuMesh {
+        self.meshes.push(Some(GpuMesh {
             vertices: buffer(
                 "mesh vertices",
                 bytemuck::cast_slice(&vertices),
@@ -178,7 +199,7 @@ impl Resources {
                 wgpu::BufferUsages::INDEX,
             ),
             index_count: mesh.indices.len() as u32,
-        });
+        }));
         Ok(MeshId::from_index(self.meshes.len() as u32 - 1))
     }
 
@@ -198,9 +219,15 @@ impl Resources {
         let mut bound = Vec::with_capacity(slots.len());
         for (id, fallback) in slots {
             bound.push(match id {
-                Some(id) => self.textures.get(id.index()).ok_or_else(|| {
-                    RenderError::InvalidAsset(String::from("a material uses an unknown texture"))
-                })?,
+                Some(id) => self
+                    .textures
+                    .get(id.index())
+                    .and_then(Option::as_ref)
+                    .ok_or_else(|| {
+                        RenderError::InvalidAsset(String::from(
+                            "a material uses an unknown texture",
+                        ))
+                    })?,
                 None => fallback,
             });
         }
@@ -236,11 +263,11 @@ impl Resources {
             layout: &self.material_layout,
             entries: &entries,
         });
-        self.materials.push(GpuMaterial {
+        self.materials.push(Some(GpuMaterial {
             group,
             blend: matches!(material.alpha_mode, AlphaMode::Blend),
             double_sided: material.double_sided,
-        });
+        }));
         Ok(MaterialId::from_index(self.materials.len() as u32 - 1))
     }
 }

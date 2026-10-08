@@ -11,7 +11,9 @@
 mod error;
 mod gltf_import;
 mod model;
+mod text;
 
 pub use error::{AssetError, SkinImportError};
 pub use gltf_import::{load_gltf, load_skin, skin_from_gltf};
 pub use model::{ModelData, ModelPart, SkinData};
+pub use text::{load_text, save_text};

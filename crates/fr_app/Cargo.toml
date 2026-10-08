@@ -1,0 +1,16 @@
+[package]
+name = "fr_app"
+description = "ECS, reflection, schedules and plugins of the forge engine."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+bevy_app = "0.17.3"
+bevy_ecs = "0.17.3"
+bevy_reflect = "0.17.3"

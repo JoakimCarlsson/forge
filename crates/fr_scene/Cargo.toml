@@ -1,0 +1,21 @@
+[package]
+name = "fr_scene"
+description = "Editable scene data and ECS components of the forge engine."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+fr_app.workspace = true
+fr_camera.workspace = true
+fr_light.workspace = true
+fr_math.workspace = true
+fr_transform.workspace = true
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+uuid = { version = "1.26.1", features = ["v4"] }

@@ -263,6 +263,23 @@ impl Renderer {
         self.resources.create_material(&self.device, material)
     }
 
+    /// Releases a mesh's GPU buffers without reusing its handle.
+    pub fn remove_mesh(&mut self, id: MeshId) {
+        self.resources.remove_mesh(id);
+    }
+
+    /// Releases a material unless it is the renderer's fallback material.
+    pub fn remove_material(&mut self, id: MaterialId) {
+        if id != self.default_material {
+            self.resources.remove_material(id);
+        }
+    }
+
+    /// Releases a texture; materials holding it keep it alive until they are released.
+    pub fn remove_texture(&mut self, id: TextureId) {
+        self.resources.remove_texture(id);
+    }
+
     /// The text system layout measures with and draw lists shape through.
     pub fn text(&mut self) -> &mut TextSystem {
         &mut self.text

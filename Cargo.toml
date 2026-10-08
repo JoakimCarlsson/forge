@@ -10,6 +10,8 @@ license = "MIT"
 publish = false
 
 [workspace.dependencies]
+fr_app = { version = "0.1.0", path = "crates/fr_app" }
+fr_scene = { version = "0.1.0", path = "crates/fr_scene" }
 fr_math = { version = "0.1.0", path = "crates/fr_math" }
 fr_handle = { version = "0.1.0", path = "crates/fr_handle" }
 fr_time = { version = "0.1.0", path = "crates/fr_time" }

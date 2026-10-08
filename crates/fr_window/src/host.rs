@@ -138,6 +138,9 @@ impl<H: WindowHandler> ApplicationHandler for Host<H> {
                 };
                 self.scale_factor = window.scale_factor();
                 self.handler.created(&window);
+                if self.handler.should_exit() {
+                    event_loop.exit();
+                }
                 window.request_redraw();
                 self.window = Some(window);
             }
@@ -165,6 +168,10 @@ impl<H: WindowHandler> ApplicationHandler for Host<H> {
             WindowEvent::Resized(size) => self.handler.resized(size.width, size.height),
             WindowEvent::RedrawRequested => {
                 self.handler.redraw();
+                if self.handler.should_exit() {
+                    event_loop.exit();
+                    return;
+                }
                 if let Some(window) = &self.window {
                     window.request_redraw();
                 }

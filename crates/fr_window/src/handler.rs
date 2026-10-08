@@ -43,6 +43,11 @@ pub trait WindowHandler {
     /// Called with the text a key press produced.
     fn text_input(&mut self, text: &str);
 
+    /// Whether the event loop should exit after a handler call.
+    fn should_exit(&self) -> bool {
+        false
+    }
+
     /// Called when the user asks to close the window; the loop exits afterwards.
     fn close_requested(&mut self) {}
 }
@@ -101,6 +106,11 @@ impl<H: WindowHandler + ?Sized> WindowHandler for &mut H {
     /// Forwards to the borrowed handler.
     fn text_input(&mut self, text: &str) {
         (**self).text_input(text);
+    }
+
+    /// Forwards the request to stop the event loop.
+    fn should_exit(&self) -> bool {
+        (**self).should_exit()
     }
 
     /// Forwards to the borrowed handler.
